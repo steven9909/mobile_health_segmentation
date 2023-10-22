@@ -1,0 +1,28 @@
+ssh -v -o ServerAliveInterval=60 <userid>@comps0.cs.toronto.edu
+
+mkdir mobile_health
+cd mobile_health
+git clone https://github.com/steven9909/mobile_health_segmentation.git
+
+python3 -m venv venv
+source venv/bin/activate
+pip3 install torch torchvision torchaudio
+"""pip3 install other missing dependencies"""
+
+vim train.sh
+Add in the following lines: 
+	source ./venv/bin/activate
+	chmod +x train.py
+	python3 train.py
+
+# --mem - amount of system ram
+# --gres - amount of GPUS requesting
+# --partition - run info to get a list of partitions - we want to use biggpunodes
+# --t - amount of time we can reserve the nodes in minutes (max is 3 days "-t 3-0") 
+# -c - number of cpu cores allocated
+srun --partition=smallgpunodes -c 1 --mem=2G --gres=gpu:1 -t 1 train.sh
+
+Run sinfo -N -p biggpunodes -o '%10N %G' to see the list of gpunodes
+Add in --nodelist gpunode1 to specify which gpu you want to reserve
+
+slurm_report -g to see which gpu nodes are free
