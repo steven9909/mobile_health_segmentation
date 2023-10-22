@@ -4,6 +4,12 @@ import torch.nn as nn
 
 class UNet(nn.Module):
     def __init__(self, in_channels, out_channels):
+        """Initialize UNet
+
+        Args:
+            in_channels (int): number of input channels
+            out_channels (int): number of output channels
+        """
         super().__init__()
         self.down_blocks = nn.ModuleList(
             [
@@ -39,6 +45,15 @@ class UNet(nn.Module):
         self.max_pool = nn.MaxPool2d(2)
 
     def forward(self, x):
+        """Perform forward pass on UNet
+        If input is of shape (B, C, H, W), the output is also of shape (B, C, H, W)
+
+        Args:
+            x (Tensor): input
+
+        Returns:
+            Tensor: output of the same shape as input
+        """
         skip_connections = []
         for down_block in self.down_blocks:
             x = down_block(x)
@@ -48,6 +63,7 @@ class UNet(nn.Module):
         x = self.bottleneck(x)
 
         for i, (up_block, block) in enumerate(zip(self.up_blocks, self.blocks)):
+            # Concatenate on the channel dimension
             x = torch.cat((skip_connections[-(i + 1)], up_block(x)), dim=1)
             x = block(x)
 
@@ -56,6 +72,12 @@ class UNet(nn.Module):
 
 class UNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
+        """Initialize UNetBlock - double conv blocks with ReLU
+
+        Args:
+            in_channels (int): number of input channels
+            out_channels (int): number of output channels
+        """
         super().__init__()
         self.seq = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
