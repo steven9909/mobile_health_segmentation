@@ -1,0 +1,5 @@
+venv/
+annotated/
+original/
+config.yml
+.DS_Store
