@@ -1,6 +1,8 @@
 from model import UNet
 from dataset import CuffDataset
 
+from tqdm import tqdm
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -51,11 +53,10 @@ loss_fn = nn.BCEWithLogitsLoss()
 
 max_epochs = 4
 
-for epoch in range(max_epochs):
+for epoch in tqdm(range(max_epochs)):
     for data, mask in train_dataloader:
         optim.zero_grad()
         output = model(data)
         loss = loss_fn(output, mask)
-        print(loss)
         loss.backward()
         optim.step()
