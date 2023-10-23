@@ -1,0 +1,61 @@
+from model import UNet
+from dataset import CuffDataset
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+import pandas as pd
+from pathlib import Path
+from sklearn.model_selection import train_test_split
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+
+PATCH_SIZE = 256
+
+img_dir = "original/"
+mask_dir = "annotated/"
+
+img_paths = [file for file in Path(img_dir).iterdir() if not file.name.startswith(".")]
+mask_paths = [
+    file for file in Path(mask_dir).iterdir() if not file.name.startswith(".")
+]
+
+df = pd.DataFrame({"image_path": img_paths, "mask_paths": mask_paths}, dtype=str)
+
+transforms = A.Compose(
+    [
+        A.RandomCrop(width=PATCH_SIZE, height=PATCH_SIZE, p=1.0),
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+        A.RandomRotate90(p=0.5),
+        A.Transpose(p=0.5),
+        A.ShiftScaleRotate(shift_limit=0.01, scale_limit=0.04, rotate_limit=0, p=0.25),
+        ToTensorV2(),
+    ]
+)
+
+# Split df into train and test data
+train_df, val_df = train_test_split(df, test_size=0.2)
+train_df = train_df.reset_index(drop=True)
+val_df = val_df.reset_index(drop=True)
+
+train_dataset = CuffDataset(train_df, transforms=transforms)
+train_dataloader = DataLoader(train_dataset, batch_size=28, shuffle=False)
+
+val_dataset = CuffDataset(val_df, transforms=transforms)
+val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
+
+model = UNet(3, 1)
+optim = torch.optim.Adam(model.parameters())
+loss_fn = nn.BCEWithLogitsLoss()
+
+max_epochs = 4
+
+for epoch in range(max_epochs):
+    for data, mask in train_dataloader:
+        optim.zero_grad()
+        output = model(data)
+        loss = loss_fn(output, mask)
+        print(loss)
+        loss.backward()
+        optim.step()
