@@ -84,7 +84,7 @@ def accuracy_check(dataloader, model):
 
         return accuracy/len(np_ims[0].flatten())
     
-print("Accuracy: {}").format(accuracy_check(val_dataloader, model))
+print(accuracy_check(val_dataloader, model))
     
 '''
 def accuracy_check(mask, prediction):
