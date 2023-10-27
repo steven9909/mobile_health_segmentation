@@ -22,7 +22,9 @@ class CuffDataset(Dataset):
         image = augmented["image"]  # Dimension (3, 255, 255)
         mask = augmented["mask"]  # Dimension (255, 255)
         image = normalize(
-            image, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5), inplace=True
+                image, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5), inplace=True
         )
+
         mask = np.expand_dims(mask, axis=0)
+
         return image, mask

@@ -11,6 +11,9 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from PIL import Image
+import numpy as np
+import glob as gl
 
 PATCH_SIZE = 256
 
@@ -24,7 +27,7 @@ mask_paths = [
 
 df = pd.DataFrame({"image_path": img_paths, "mask_paths": mask_paths}, dtype=str)
 
-transforms = A.Compose(
+transforms_train = A.Compose(
     [
         A.RandomCrop(width=PATCH_SIZE, height=PATCH_SIZE, p=1.0),
         A.HorizontalFlip(p=0.5),
@@ -36,15 +39,17 @@ transforms = A.Compose(
     ]
 )
 
+transforms_val = A.Compose([ToTensorV2(),])
+
 # Split df into train and test data
 train_df, val_df = train_test_split(df, test_size=0.2)
 train_df = train_df.reset_index(drop=True)
 val_df = val_df.reset_index(drop=True)
 
-train_dataset = CuffDataset(train_df, transforms=transforms)
+train_dataset = CuffDataset(train_df, transforms=transforms_train)
 train_dataloader = DataLoader(train_dataset, batch_size=28, shuffle=False)
 
-val_dataset = CuffDataset(val_df, transforms=transforms)
+val_dataset = CuffDataset(val_df, transforms=transforms_val)
 val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
 model = UNet(3, 1)
@@ -60,3 +65,48 @@ for epoch in tqdm(range(max_epochs)):
         loss = loss_fn(output, mask)
         loss.backward()
         optim.step()
+
+def accuracy_check(dataloader, model):
+    for data, mask in dataloader:
+        ims = [mask, model(data)]
+        np_ims = []
+        for item in ims:
+            if 'str' in str(type(item)):
+                item = np.array(Image.open(item))
+            elif 'PIL' in str(type(item)):
+                item = np.array(item)
+            elif 'torch' in str(type(item)):
+                item = item.numpy()
+            np_ims.append(item)
+
+        compare = np.equal(np_ims[0], np_ims[1])
+        accuracy = np.sum(compare)
+
+        return accuracy/len(np_ims[0].flatten())
+    
+print("Accuracy: {}").format(accuracy_check(val_dataloader))
+    
+'''
+def accuracy_check(mask, prediction):
+    ims = [mask, prediction]
+    np_ims = []
+    for item in ims:
+        if 'str' in str(type(item)):
+            item = np.array(Image.open(item))
+        elif 'PIL' in str(type(item)):
+            item = np.array(item)
+        elif 'torch' in str(type(item)):
+            item = item.numpy()
+        np_ims.append(item)
+
+    compare = np.equal(np_ims[0], np_ims[1])
+    accuracy = np.sum(compare)
+
+    return accuracy/len(np_ims[0].flatten())
+
+def accuracy_check_for_batch(masks, predictions, batch_size):
+    total_acc = 0
+    for index in range(batch_size):
+        total_acc += accuracy_check(masks[index], predictions[index])
+    return total_acc/batch_size
+'''
