@@ -14,11 +14,14 @@ from albumentations.pytorch import ToTensorV2
 from PIL import Image
 import numpy as np
 import glob as gl
+import os
 
 PATCH_SIZE = 256
 
 img_dir = "original/"
 mask_dir = "annotated/"
+BASE_OUTPUT="output"
+MODEL_PATH = os.path.join(BASE_OUTPUT, "unet.pth")
 
 img_paths = [file for file in Path(img_dir).iterdir() if not file.name.startswith(".")]
 mask_paths = [
@@ -66,6 +69,8 @@ for epoch in tqdm(range(max_epochs)):
         loss.backward()
         optim.step()
 
+torch.save(model, MODEL_PATH)
+
 def accuracy_check(dataloader, model):
     for data, mask in dataloader:
         ims = [mask, model(data)]
@@ -78,8 +83,8 @@ def accuracy_check(dataloader, model):
         accuracy = np.sum(compare)
 
         return accuracy/len(np_ims[0].flatten())
-    
-print(accuracy_check(val_dataloader, model))
+  
+#print(accuracy_check(val_dataloader, model))
     
 '''
 def accuracy_check(mask, prediction):
