@@ -71,12 +71,7 @@ def accuracy_check(dataloader, model):
         ims = [mask, model(data)]
         np_ims = []
         for item in ims:
-            if 'str' in str(type(item)):
-                item = np.array(Image.open(item))
-            elif 'PIL' in str(type(item)):
-                item = np.array(item)
-            elif 'torch' in str(type(item)):
-                item = item.numpy()
+            item = item.numpy()
             np_ims.append(item)
 
         compare = np.equal(np_ims[0], np_ims[1])
