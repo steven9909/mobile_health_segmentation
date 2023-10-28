@@ -111,11 +111,11 @@ with torch.no_grad():
         mask = mask.to(device)
         prediction = model(data)
 
-        intersection = np.logical_and(mask, prediction)
-        union = np.logical_or(mask, prediction)
+        intersection = np.logical_and(mask.numpy(), prediction.numpy())
+        union = np.logical_or(mask.numpy(), prediction.numpy())
         iou_score = np.sum(intersection) / np.sum(union)
 
-        accuracy = np.sum(np.equal(mask, prediction))
+        accuracy = np.sum(np.equal(mask.numpy(), prediction.numpy()))
         loss = loss_fn(prediction, mask).item()
         print(loss)
         print(iou_score)
