@@ -60,11 +60,12 @@ train_dataloader = DataLoader(train_dataset, batch_size=28, shuffle=False)
 val_dataset = CuffDataset(val_df, transforms=transforms_val)
 val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
+loss_fn = nn.BCEWithLogitsLoss()
+
 if not os.path.exists(MODEL_PATH):
     model = UNet(3, 1)
     model = model.to(device)
     optim = torch.optim.Adam(model.parameters())
-    loss_fn = nn.BCEWithLogitsLoss()
 
     losses = []
     iterations = []
