@@ -55,29 +55,32 @@ train_dataloader = DataLoader(train_dataset, batch_size=28, shuffle=False)
 val_dataset = CuffDataset(val_df, transforms=transforms_val)
 val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
-model = UNet(3, 1)
-optim = torch.optim.Adam(model.parameters())
-loss_fn = nn.BCEWithLogitsLoss()
+if not os.exists(MODEL_PATH):
+    model = UNet(3, 1)
+    optim = torch.optim.Adam(model.parameters())
+    loss_fn = nn.BCEWithLogitsLoss()
 
-print('Training')
-max_epochs = 4
+    print('Training')
+    max_epochs = 4
 
-for epoch in tqdm(range(max_epochs)):
-    for data, mask in train_dataloader:
-        optim.zero_grad()
-        output = model(data)
-        loss = loss_fn(output, mask)
-        loss.backward()
-        optim.step()
+    for epoch in tqdm(range(max_epochs)):
+        for data, mask in train_dataloader:
+            optim.zero_grad()
+            output = model(data)
+            loss = loss_fn(output, mask)
+            loss.backward()
+            optim.step()
 
-torch.save(model, MODEL_PATH)
+    torch.save(model, MODEL_PATH)
+else:
+    model = torch.load(MODEL_PATH)
 
 print('Testing')
 model.eval()
 for data, mask in val_dataloader:
     outputs = model(data)
-    print(loss_fn(output, mask))
-    
+    print(loss_fn(outputs, mask))
+
 '''
 def accuracy_check(mask, prediction):
     ims = [mask, prediction]
