@@ -15,6 +15,7 @@ from PIL import Image
 import numpy as np
 import glob as gl
 import os
+import os.path
 
 PATCH_SIZE = 256
 
@@ -55,7 +56,7 @@ train_dataloader = DataLoader(train_dataset, batch_size=28, shuffle=False)
 val_dataset = CuffDataset(val_df, transforms=transforms_val)
 val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
-if not os.exists(MODEL_PATH):
+if not os.path.exists(MODEL_PATH):
     model = UNet(3, 1)
     optim = torch.optim.Adam(model.parameters())
     loss_fn = nn.BCEWithLogitsLoss()
