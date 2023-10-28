@@ -11,9 +11,7 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from PIL import Image
-import numpy as np
-import glob as gl
+import matplotlib.pyplot as plt
 import os
 import os.path
 
@@ -68,11 +66,19 @@ if not os.path.exists(MODEL_PATH):
     optim = torch.optim.Adam(model.parameters())
     loss_fn = nn.BCEWithLogitsLoss()
 
+    losses = []
+    iterations = []
+    print_step = 50
+
     print("Training")
     max_epochs = 4
 
+    train_dataloader_len = len(train_dataloader)
+
     for epoch in tqdm(range(max_epochs)):
-        for data, mask in train_dataloader:
+        running_loss = 0.0
+
+        for i, (data, mask) in enumerate(train_dataloader):
             optim.zero_grad()
 
             data = data.to(device)
@@ -80,10 +86,17 @@ if not os.path.exists(MODEL_PATH):
 
             output = model(data)
             loss = loss_fn(output, mask)
+            running_loss += loss.item()
 
             loss.backward()
             optim.step()
 
+            if (i + 1) % print_step == 0:
+                iterations.append(i + (epoch * train_dataloader_len))
+                losses.append(running_loss / print_step)
+
+    plt.plot(iterations, losses)
+    plt.savefig("./loss.png")
     torch.save(model, MODEL_PATH)
 else:
     model = torch.load(MODEL_PATH)
@@ -95,7 +108,9 @@ with torch.no_grad():
         data = data.to(device)
         mask = mask.to(device)
         outputs = model(data)
-        print(loss_fn(outputs, mask))
+
+        loss = loss_fn(outputs, mask).item()
+        print(loss)
 
 """
 def accuracy_check(mask, prediction):
