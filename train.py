@@ -14,6 +14,7 @@ from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
 import os
 import os.path
+import numpy as np
 
 PATCH_SIZE = 256
 
@@ -108,10 +109,17 @@ with torch.no_grad():
     for data, mask in val_dataloader:
         data = data.to(device)
         mask = mask.to(device)
-        outputs = model(data)
+        prediction = model(data)
 
-        loss = loss_fn(outputs, mask).item()
+        intersection = np.logical_and(mask, prediction)
+        union = np.logical_or(mask, prediction)
+        iou_score = np.sum(intersection) / np.sum(union)
+
+        accuracy = np.sum(np.equal(mask, prediction))
+        loss = loss_fn(prediction, mask).item()
         print(loss)
+        print(iou_score)
+        print(accuracy)
 
 """
 def accuracy_check(mask, prediction):
