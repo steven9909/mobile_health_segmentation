@@ -72,7 +72,7 @@ if not os.path.exists(MODEL_PATH):
             loss.backward()
             optim.step()
 
-    #torch.save(model, MODEL_PATH)
+    torch.save(model, MODEL_PATH)
 else:
     model = torch.load(MODEL_PATH)
 
