@@ -72,15 +72,16 @@ if not os.path.exists(MODEL_PATH):
             loss.backward()
             optim.step()
 
-    torch.save(model, MODEL_PATH)
+    #torch.save(model, MODEL_PATH)
 else:
     model = torch.load(MODEL_PATH)
 
 print('Testing')
 model.eval()
-for data, mask in val_dataloader:
-    outputs = model(data)
-    print(loss_fn(outputs, mask))
+with torch.no_grad():
+    for data, mask in val_dataloader:
+        outputs = model(data)
+        print(loss_fn(outputs, mask))
 
 '''
 def accuracy_check(mask, prediction):
