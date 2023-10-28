@@ -70,10 +70,10 @@ if not os.path.exists(MODEL_PATH):
 
     losses = []
     iterations = []
-    print_step = 50
+    print_step = 10
 
     print("Training")
-    max_epochs = 4
+    max_epochs = 100
 
     train_dataloader_len = len(train_dataloader)
 
@@ -111,15 +111,15 @@ with torch.no_grad():
         mask = mask.to(device)
         prediction = model(data)
 
-        intersection = np.logical_and(mask.numpy(), prediction.numpy())
-        union = np.logical_or(mask.numpy(), prediction.numpy())
-        iou_score = np.sum(intersection) / np.sum(union)
+        #intersection = np.logical_and(mask.numpy(), prediction.numpy())
+        #union = np.logical_or(mask.numpy(), prediction.numpy())
+        #iou_score = np.sum(intersection) / np.sum(union)
 
-        accuracy = np.sum(np.equal(mask.numpy(), prediction.numpy()))
+        #accuracy = np.sum(np.equal(mask.numpy(), prediction.numpy()))
         loss = loss_fn(prediction, mask).item()
         print(loss)
-        print(iou_score)
-        print(accuracy)
+        #print(iou_score)
+        #print(accuracy)
 
 """
 def accuracy_check(mask, prediction):
