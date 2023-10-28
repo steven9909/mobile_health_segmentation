@@ -87,7 +87,7 @@ if not os.path.exists(MODEL_PATH):
     torch.save(model, MODEL_PATH)
 else:
     model = torch.load(MODEL_PATH)
-
+    model = model.to(device)
 print("Testing")
 model.eval()
 with torch.no_grad():
