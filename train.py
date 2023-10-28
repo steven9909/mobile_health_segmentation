@@ -59,6 +59,7 @@ model = UNet(3, 1)
 optim = torch.optim.Adam(model.parameters())
 loss_fn = nn.BCEWithLogitsLoss()
 
+print('Training')
 max_epochs = 4
 
 for epoch in tqdm(range(max_epochs)):
@@ -71,20 +72,11 @@ for epoch in tqdm(range(max_epochs)):
 
 torch.save(model, MODEL_PATH)
 
-def accuracy_check(dataloader, model):
-    for data, mask in dataloader:
-        ims = [mask, model(data)]
-        np_ims = []
-        for item in ims:
-            item = item.numpy()
-            np_ims.append(item)
-
-        compare = np.equal(np_ims[0], np_ims[1])
-        accuracy = np.sum(compare)
-
-        return accuracy/len(np_ims[0].flatten())
-  
-#print(accuracy_check(val_dataloader, model))
+print('Testing')
+model.eval()
+for data, mask in val_dataloader:
+    outputs = model(data)
+    print(loss_fn(output, mask))
     
 '''
 def accuracy_check(mask, prediction):
