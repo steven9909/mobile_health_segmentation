@@ -21,8 +21,10 @@ PATCH_SIZE = 256
 
 img_dir = "original/"
 mask_dir = "annotated/"
-BASE_OUTPUT="output"
+BASE_OUTPUT = "output"
 MODEL_PATH = os.path.join(BASE_OUTPUT, "unet.pth")
+
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 img_paths = [file for file in Path(img_dir).iterdir() if not file.name.startswith(".")]
 mask_paths = [
@@ -43,7 +45,11 @@ transforms_train = A.Compose(
     ]
 )
 
-transforms_val = A.Compose([ToTensorV2(),])
+transforms_val = A.Compose(
+    [
+        ToTensorV2(),
+    ]
+)
 
 # Split df into train and test data
 train_df, val_df = train_test_split(df, test_size=0.2)
@@ -58,17 +64,23 @@ val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
 
 if not os.path.exists(MODEL_PATH):
     model = UNet(3, 1)
+    model = model.to(device)
     optim = torch.optim.Adam(model.parameters())
     loss_fn = nn.BCEWithLogitsLoss()
 
-    print('Training')
+    print("Training")
     max_epochs = 4
 
     for epoch in tqdm(range(max_epochs)):
         for data, mask in train_dataloader:
             optim.zero_grad()
+
+            data = data.to(device)
+            mask = mask.to(device)
+
             output = model(data)
             loss = loss_fn(output, mask)
+
             loss.backward()
             optim.step()
 
@@ -76,14 +88,16 @@ if not os.path.exists(MODEL_PATH):
 else:
     model = torch.load(MODEL_PATH)
 
-print('Testing')
+print("Testing")
 model.eval()
 with torch.no_grad():
     for data, mask in val_dataloader:
+        data = data.to(device)
+        mask = mask.to(device)
         outputs = model(data)
         print(loss_fn(outputs, mask))
 
-'''
+"""
 def accuracy_check(mask, prediction):
     ims = [mask, prediction]
     np_ims = []
@@ -106,4 +120,4 @@ def accuracy_check_for_batch(masks, predictions, batch_size):
     for index in range(batch_size):
         total_acc += accuracy_check(masks[index], predictions[index])
     return total_acc/batch_size
-'''
+"""
