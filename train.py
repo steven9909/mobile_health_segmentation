@@ -1,6 +1,6 @@
-from model import UNet
-from dataset import CuffDataset
-from arguments import ArgParser
+from models.unet import UNet
+from data.dataset import CuffDataset
+from util.arguments import ArgParser
 
 from tqdm import tqdm
 
