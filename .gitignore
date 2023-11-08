@@ -4,3 +4,4 @@ original/
 config.yml
 .DS_Store
 __pycache__/
+runs/
