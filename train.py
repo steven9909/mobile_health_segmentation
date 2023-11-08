@@ -1,5 +1,6 @@
 from model import UNet
 from dataset import CuffDataset
+from arguments import ArgParser
 
 from tqdm import tqdm
 
@@ -7,141 +8,139 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import pandas as pd
+from torch.optim.lr_scheduler import LambdaLR
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-import matplotlib.pyplot as plt
-import os
-import os.path
-import numpy as np
 
-PATCH_SIZE = 256
+import cv2
+from torch.utils.tensorboard import SummaryWriter
 
-img_dir = "original/"
-mask_dir = "annotated/"
-BASE_OUTPUT = "output"
-MODEL_PATH = os.path.join(BASE_OUTPUT, "unet.pth")
+if __name__ == "__main__":
+    args = ArgParser().parse_args()
 
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    PATCH_SIZE = 256
 
-img_paths = [file for file in Path(img_dir).iterdir() if not file.name.startswith(".")]
-mask_paths = [
-    file for file in Path(mask_dir).iterdir() if not file.name.startswith(".")
-]
+    SAVE_EPOCH = 500
 
-df = pd.DataFrame({"image_path": img_paths, "mask_paths": mask_paths}, dtype=str)
+    # Using a single worker seems like it has the best performance
+    num_workers = 0
 
-transforms_train = A.Compose(
-    [
-        A.RandomCrop(width=PATCH_SIZE, height=PATCH_SIZE, p=1.0),
-        A.HorizontalFlip(p=0.5),
-        A.VerticalFlip(p=0.5),
-        A.RandomRotate90(p=0.5),
-        A.Transpose(p=0.5),
-        A.ShiftScaleRotate(shift_limit=0.01, scale_limit=0.04, rotate_limit=0, p=0.25),
-        ToTensorV2(),
-    ]
-)
+    img_dir = Path("original/")
+    mask_dir = Path("annotated/")
+    BASE_OUTPUT = Path("output")
+    BASE_OUTPUT.mkdir(parents=True, exist_ok=True)
 
-transforms_val = A.Compose(
-    [
-        ToTensorV2(),
-    ]
-)
+    MODEL_PATH = BASE_OUTPUT / "unet.pth"
+    TEMP_PATH = BASE_OUTPUT / "temp.pth"
 
-# Split df into train and test data
-train_df, val_df = train_test_split(df, test_size=0.2)
-train_df = train_df.reset_index(drop=True)
-val_df = val_df.reset_index(drop=True)
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-train_dataset = CuffDataset(train_df, transforms=transforms_train)
-train_dataloader = DataLoader(train_dataset, batch_size=28, shuffle=False)
+    img_paths = [file for file in img_dir.iterdir() if not file.name.startswith(".")]
+    mask_paths = [file for file in mask_dir.iterdir() if not file.name.startswith(".")]
 
-val_dataset = CuffDataset(val_df, transforms=transforms_val)
-val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
+    df = pd.DataFrame({"image_path": img_paths, "mask_paths": mask_paths}, dtype=str)
 
-loss_fn = nn.BCEWithLogitsLoss()
+    writer = SummaryWriter()
 
-if not os.path.exists(MODEL_PATH):
+    transforms_train = A.Compose(
+        [
+            A.Resize(
+                width=PATCH_SIZE, height=PATCH_SIZE, interpolation=cv2.INTER_NEAREST
+            ),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.RandomRotate90(p=0.5),
+            A.ShiftScaleRotate(
+                shift_limit=0.01, scale_limit=0.04, rotate_limit=0, p=0.25
+            ),
+            ToTensorV2(),
+        ]
+    )
+
+    transforms_val = A.Compose(
+        [
+            ToTensorV2(),
+        ]
+    )
+
+    train_dataset = CuffDataset(df, transforms=transforms_train)
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=36,
+        shuffle=True,
+        num_workers=num_workers,
+    )
+    print(f"Using batch size of 36, and {num_workers} workers")
+
     model = UNet(3, 1)
-    model = model.to(device)
-    optim = torch.optim.Adam(model.parameters())
 
-    losses = []
-    iterations = []
-    print_step = 10
-
-    print("Training")
-    max_epochs = 100
+    max_epochs = 3000
+    init_lr = 9e-4
 
     train_dataloader_len = len(train_dataloader)
 
-    for epoch in tqdm(range(max_epochs)):
-        running_loss = 0.0
+    optim = torch.optim.Adam(model.parameters(), lr=init_lr)
+    scheduler = LambdaLR(optim, lr_lambda=lambda epoch: 1 - epoch / max_epochs)
+    start_epoch = 0
 
-        for i, (data, mask) in enumerate(train_dataloader):
-            optim.zero_grad()
+    if args.continue_training == "y":
+        print(f"Continuing training from checkpoint defined at: {MODEL_PATH}")
+        model.load_state_dict(torch.load(MODEL_PATH)["model"])
+        scheduler.load_state_dict(torch.load(MODEL_PATH)["scheduler"])
+        start_epoch = torch.load(MODEL_PATH)["epoch"]
 
-            data = data.to(device)
-            mask = mask.to(device)
-
-            output = model(data)
-            loss = loss_fn(output, mask)
-            running_loss += loss.item()
-
-            loss.backward()
-            optim.step()
-
-            if (i + 1) % print_step == 0:
-                iterations.append(i + (epoch * train_dataloader_len))
-                losses.append(running_loss / print_step)
-
-    plt.plot(iterations, losses)
-    plt.savefig("./loss.png")
-    torch.save(model, MODEL_PATH)
-else:
-    model = torch.load(MODEL_PATH)
     model = model.to(device)
-print("Testing")
-model.eval()
-with torch.no_grad():
-    for data, mask in val_dataloader:
-        data = data.to(device)
-        mask = mask.to(device)
-        prediction = model(data)
 
-        #intersection = np.logical_and(mask.numpy(), prediction.numpy())
-        #union = np.logical_or(mask.numpy(), prediction.numpy())
-        #iou_score = np.sum(intersection) / np.sum(union)
+    loss_fn = nn.BCEWithLogitsLoss()
 
-        #accuracy = np.sum(np.equal(mask.numpy(), prediction.numpy()))
-        loss = loss_fn(prediction, mask).item()
-        print(loss)
-        #print(iou_score)
-        #print(accuracy)
+    try:
+        for epoch in tqdm(range(start_epoch, max_epochs)):
+            for i, (data, mask) in enumerate(train_dataloader):
+                optim.zero_grad()
 
-"""
-def accuracy_check(mask, prediction):
-    ims = [mask, prediction]
-    np_ims = []
-    for item in ims:
-        if 'str' in str(type(item)):
-            item = np.array(Image.open(item))
-        elif 'PIL' in str(type(item)):
-            item = np.array(item)
-        elif 'torch' in str(type(item)):
-            item = item.numpy()
-        np_ims.append(item)
+                data = data.to(device)
+                mask = mask.to(device)
 
-    compare = np.equal(np_ims[0], np_ims[1])
-    accuracy = np.sum(compare)
+                output = model(data)
+                loss = loss_fn(output, mask)
 
-    return accuracy/len(np_ims[0].flatten())
+                loss.backward()
+                optim.step()
 
-def accuracy_check_for_batch(masks, predictions, batch_size):
-    total_acc = 0
-    for index in range(batch_size):
-        total_acc += accuracy_check(masks[index], predictions[index])
-    return total_acc/batch_size
-"""
+                writer.add_scalar(
+                    "loss",
+                    loss.item(),
+                    i + (epoch * train_dataloader_len),
+                )
+            scheduler.step()
+            writer.add_scalar("lr", scheduler.get_last_lr()[0], epoch)
+            writer.close()
+
+            if epoch % SAVE_EPOCH == 0:
+                torch.save(
+                    {
+                        "model": model.state_dict(),
+                        "scheduler": scheduler.state_dict(),
+                        "epoch": epoch,
+                    },
+                    BASE_OUTPUT / f"temp_{epoch}",
+                )
+        torch.save(
+            {
+                "model": model.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "epoch": epoch,
+            },
+            MODEL_PATH,
+        )
+    except KeyboardInterrupt:
+        optim.zero_grad()
+        torch.save(
+            {
+                "model": model.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "epoch": epoch,
+            },
+            TEMP_PATH,
+        )
