@@ -1,34 +1,43 @@
-from models.unet import UNet
-from data.dataset import CuffDataset
-from util.arguments import ArgParser
+from pathlib import Path
 
-from tqdm import tqdm
-
+import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-import pandas as pd
 from torch.optim.lr_scheduler import LambdaLR
-from pathlib import Path
-from torchvision.ops import sigmoid_focal_loss
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-
-import cv2
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
+import transforms.transform as T
+from data.dataset import CuffDataset
+from models.unet import UNet
+from util.arguments import ArgParser
+
+
+def show_image(image, mask):
+    import matplotlib.pyplot as plt
+
+    _, (ax1, ax2) = plt.subplots(1, 2)
+    ax1.imshow(image.detach().cpu().permute(1, 2, 0))
+    ax2.imshow(mask.detach().cpu().squeeze())
+    plt.show()
+
 
 if __name__ == "__main__":
     args = ArgParser().parse_args()
 
     PATCH_SIZE = 256
 
-    SAVE_EPOCH = 500
+    SAVE_EPOCH = 1000
+    CHECK_VAL_EPOCH = 50
 
     # Using a single worker seems like it has the best performance
     num_workers = 0
 
     img_dir = Path("original/")
     mask_dir = Path("annotated/")
+    img_val_dir = Path("validation/original/")
+    mask_val_dir = Path("validation/annotated/")
     BASE_OUTPUT = Path("output")
     BASE_OUTPUT.mkdir(parents=True, exist_ok=True)
 
@@ -39,29 +48,20 @@ if __name__ == "__main__":
 
     img_paths = [file for file in img_dir.iterdir() if not file.name.startswith(".")]
     mask_paths = [file for file in mask_dir.iterdir() if not file.name.startswith(".")]
+    img_val_paths = [file for file in img_val_dir.iterdir() if not file.name.startswith(".")]
+    mask_val_paths = [file for file in mask_val_dir.iterdir() if not file.name.startswith(".")]
 
     df = pd.DataFrame({"image_path": img_paths, "mask_paths": mask_paths}, dtype=str)
+    df_val = pd.DataFrame("image_path": img_val_paths, "mask_paths": mask_val_paths, dtype=str)
 
     writer = SummaryWriter()
 
-    transforms_train = A.Compose(
+    transforms_train = T.DualCompose(
         [
-            A.Resize(
-                width=PATCH_SIZE, height=PATCH_SIZE, interpolation=cv2.INTER_NEAREST
-            ),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            A.RandomRotate90(p=0.5),
-            A.ShiftScaleRotate(
-                shift_limit=0.01, scale_limit=0.04, rotate_limit=0, p=0.25
-            ),
-            ToTensorV2(),
-        ]
-    )
-
-    transforms_val = A.Compose(
-        [
-            ToTensorV2(),
+            T.RandomHorizontalFlip(),
+            T.RandomVerticalFlip(),
+            T.RandomShiftScaleRotate(),
+            T.RandomColorJitter(),
         ]
     )
 
@@ -72,12 +72,19 @@ if __name__ == "__main__":
         shuffle=True,
         num_workers=num_workers,
     )
+
+    validate_dataset = CuffDataset(df_val, transforms=None)
+    val_dataloader = DataLoader(
+        validate_dataset,
+        batch_size=3,
+        num_workers=num_workers,
+    )
     print(f"Using batch size of 36, and {num_workers} workers")
 
     model = UNet(3, 1)
 
-    max_epochs = 3000
-    init_lr = 9e-4
+    max_epochs = 10000
+    init_lr = 1e-3
 
     train_dataloader_len = len(train_dataloader)
 
@@ -92,8 +99,10 @@ if __name__ == "__main__":
         start_epoch = torch.load(MODEL_PATH)["epoch"]
 
     model = model.to(device)
+    model.train()
 
     loss_fn = nn.BCEWithLogitsLoss()
+    # loss_fn = sigmoid_focal_loss
 
     try:
         for epoch in tqdm(range(start_epoch, max_epochs)):
@@ -127,6 +136,25 @@ if __name__ == "__main__":
                     },
                     BASE_OUTPUT / f"temp_{epoch}",
                 )
+            
+            if epoch % CHECK_VAL_EPOCH == 0:
+                model.eval()
+                with torch.no_grad():
+                    for i, (data, mask) in enumerate(val_dataloader):
+                        data = data.to(device)
+                        mask = mask.to(device)
+
+                        output = model(data)
+                        loss = loss_fn(output, mask)
+
+                        writer.add_scalar(
+                            "val_loss",
+                            loss.item(),
+                            i + (epoch * len(val_dataloader)),
+                        )
+                        writer.close()
+                model.train()
+                
         torch.save(
             {
                 "model": model.state_dict(),

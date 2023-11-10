@@ -5,3 +5,7 @@ config.yml
 .DS_Store
 __pycache__/
 runs/
+data/config.yml
+output/
+data/images
+data/original
