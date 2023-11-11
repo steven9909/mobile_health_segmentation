@@ -2,7 +2,7 @@ import torch
 from torchvision.transforms import functional as F
 
 
-class DualCompose:
+class DualCompose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
