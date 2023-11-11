@@ -1,8 +1,8 @@
-from torch.utils.data import Dataset
-from PIL import Image
 import numpy as np
-from torchvision.transforms.functional import normalize
+from PIL import Image
+from torch.utils.data import Dataset
 from torchvision import transforms
+from torchvision.transforms.functional import normalize
 
 
 class CuffDataset(Dataset):
