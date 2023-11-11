@@ -34,6 +34,9 @@ if __name__ == "__main__":
     PRINT_EPOCH = 10
     BATCH_SIZE = 32
 
+    MAX_EPOCHS = 10000
+    init_lr = 1e-5
+
     # Using a single worker seems like it has the best performance
     num_workers = 0
 
@@ -98,13 +101,10 @@ if __name__ == "__main__":
         scale=1,
     )
 
-    max_epochs = 10000
-    init_lr = 1e-5
-
     train_dataloader_len = len(train_dataloader)
 
     optim = torch.optim.Adam(model.parameters(), lr=init_lr, weight_decay=5e-4)
-    scheduler = LambdaLR(optim, lr_lambda=lambda epoch: 1 - epoch / max_epochs)
+    scheduler = LambdaLR(optim, lr_lambda=lambda epoch: 1 - epoch / MAX_EPOCHS)
     start_epoch = 0
 
     if args.continue_training == "y":
@@ -119,75 +119,64 @@ if __name__ == "__main__":
     loss_fn = nn.CrossEntropyLoss()
     # loss_fn = sigmoid_focal_loss
 
-    try:
-        for epoch in tqdm(range(start_epoch, max_epochs)):
-            for i, (data, mask) in enumerate(train_dataloader):
-                optim.zero_grad()
+    for epoch in tqdm(range(start_epoch, MAX_EPOCHS)):
+        for i, (data, mask) in enumerate(train_dataloader):
+            optim.zero_grad()
 
-                data = data.to(device)
-                mask = mask.to(device)
+            data = data.to(device)
+            mask = mask.to(device)
 
-                output = model(data)
-                loss = loss_fn(output, mask)
-                # show_image(data[0], mask[0])
+            output = model(data)
+            loss = loss_fn(output, mask)
+            # show_image(data[0], mask[0])
 
-                loss.backward()
-                optim.step()
+            loss.backward()
+            optim.step()
 
-                if i + (epoch * train_dataloader_len) % PRINT_EPOCH == 0:
-                    writer.add_scalar(
-                        "loss",
-                        loss.item(),
-                        i + (epoch * train_dataloader_len),
-                    )
-
-            scheduler.step()
-            writer.add_scalar("lr", scheduler.get_last_lr()[0], epoch)
-
-            if epoch % SAVE_EPOCH == 0:
-                torch.save(
-                    {
-                        "model": model.state_dict(),
-                        "scheduler": scheduler.state_dict(),
-                        "epoch": epoch,
-                    },
-                    BASE_OUTPUT / f"temp_{epoch}",
+            if i + (epoch * train_dataloader_len) % PRINT_EPOCH == 0:
+                writer.add_scalar(
+                    "loss",
+                    loss.item(),
+                    i + (epoch * train_dataloader_len),
                 )
 
-            if epoch % CHECK_VAL_EPOCH == 0:
-                model.eval()
-                with torch.no_grad():
-                    for i, (data, mask) in enumerate(val_dataloader):
-                        data = data.to(device)
-                        mask = mask.to(device)
+        scheduler.step()
+        writer.add_scalar("lr", scheduler.get_last_lr()[0], epoch)
 
-                        output = model(data)
-                        loss = loss_fn(output, mask)
+        if epoch % SAVE_EPOCH == 0:
+            torch.save(
+                {
+                    "model": model.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "epoch": epoch,
+                },
+                BASE_OUTPUT / f"temp_{epoch}",
+            )
 
-                        writer.add_scalar(
-                            "val_loss",
-                            loss.item(),
-                            i + (epoch * len(val_dataloader)),
-                        )
-                model.train()
+        if epoch % CHECK_VAL_EPOCH == 0:
+            model.eval()
+            with torch.no_grad():
+                for i, (data, mask) in enumerate(val_dataloader):
+                    data = data.to(device)
+                    mask = mask.to(device)
 
-            writer.close()
+                    output = model(data)
+                    loss = loss_fn(output, mask)
 
-        torch.save(
-            {
-                "model": model.state_dict(),
-                "scheduler": scheduler.state_dict(),
-                "epoch": epoch,
-            },
-            MODEL_PATH,
-        )
-    except KeyboardInterrupt:
-        optim.zero_grad()
-        torch.save(
-            {
-                "model": model.state_dict(),
-                "scheduler": scheduler.state_dict(),
-                "epoch": epoch,
-            },
-            TEMP_PATH,
-        )
+                    writer.add_scalar(
+                        "val_loss",
+                        loss.item(),
+                        i + (epoch * len(val_dataloader)),
+                    )
+            model.train()
+
+        writer.close()
+
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "scheduler": scheduler.state_dict(),
+            "epoch": epoch,
+        },
+        MODEL_PATH,
+    )
