@@ -17,9 +17,10 @@ from util.arguments import ArgParser
 def show_image(image, mask):
     import matplotlib.pyplot as plt
 
-    _, (ax1, ax2) = plt.subplots(1, 2)
-    ax1.imshow(image.detach().cpu().permute(1, 2, 0))
-    ax2.imshow(mask.detach().cpu().squeeze())
+    plt.figure()
+    plt.imshow(image.detach().cpu().permute(1, 2, 0))
+    plt.imshow(mask.detach().cpu().squeeze(), alpha=0.5)
+    plt.colorbar()
     plt.show()
 
 
@@ -28,8 +29,10 @@ if __name__ == "__main__":
 
     PATCH_SIZE = 256
 
-    SAVE_EPOCH = 1000
+    SAVE_EPOCH = 500
     CHECK_VAL_EPOCH = 50
+    PRINT_EPOCH = 10
+    BATCH_SIZE = 32
 
     # Using a single worker seems like it has the best performance
     num_workers = 0
@@ -48,11 +51,17 @@ if __name__ == "__main__":
 
     img_paths = [file for file in img_dir.iterdir() if not file.name.startswith(".")]
     mask_paths = [file for file in mask_dir.iterdir() if not file.name.startswith(".")]
-    img_val_paths = [file for file in img_val_dir.iterdir() if not file.name.startswith(".")]
-    mask_val_paths = [file for file in mask_val_dir.iterdir() if not file.name.startswith(".")]
+    img_val_paths = [
+        file for file in img_val_dir.iterdir() if not file.name.startswith(".")
+    ]
+    mask_val_paths = [
+        file for file in mask_val_dir.iterdir() if not file.name.startswith(".")
+    ]
 
     df = pd.DataFrame({"image_path": img_paths, "mask_paths": mask_paths}, dtype=str)
-    df_val = pd.DataFrame("image_path": img_val_paths, "mask_paths": mask_val_paths, dtype=str)
+    df_val = pd.DataFrame(
+        {"image_path": img_val_paths, "mask_paths": mask_val_paths}, dtype=str
+    )
 
     writer = SummaryWriter()
 
@@ -68,7 +77,7 @@ if __name__ == "__main__":
     train_dataset = CuffDataset(df, transforms=transforms_train)
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=36,
+        batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=num_workers,
     )
@@ -76,19 +85,25 @@ if __name__ == "__main__":
     validate_dataset = CuffDataset(df_val, transforms=None)
     val_dataloader = DataLoader(
         validate_dataset,
-        batch_size=3,
+        batch_size=1,
         num_workers=num_workers,
     )
-    print(f"Using batch size of 36, and {num_workers} workers")
+    print(f"Using batch size of {BATCH_SIZE}, and {num_workers} workers")
 
-    model = UNet(3, 1)
+    # model = UNet(3, 1)
+    model = torch.hub.load(
+        "milesial/Pytorch-UNet",
+        "unet_carvana",
+        pretrained=True,
+        scale=1,
+    )
 
     max_epochs = 10000
-    init_lr = 1e-3
+    init_lr = 1e-5
 
     train_dataloader_len = len(train_dataloader)
 
-    optim = torch.optim.Adam(model.parameters(), lr=init_lr)
+    optim = torch.optim.Adam(model.parameters(), lr=init_lr, weight_decay=5e-4)
     scheduler = LambdaLR(optim, lr_lambda=lambda epoch: 1 - epoch / max_epochs)
     start_epoch = 0
 
@@ -101,7 +116,7 @@ if __name__ == "__main__":
     model = model.to(device)
     model.train()
 
-    loss_fn = nn.BCEWithLogitsLoss()
+    loss_fn = nn.CrossEntropyLoss()
     # loss_fn = sigmoid_focal_loss
 
     try:
@@ -114,18 +129,20 @@ if __name__ == "__main__":
 
                 output = model(data)
                 loss = loss_fn(output, mask)
+                # show_image(data[0], mask[0])
 
                 loss.backward()
                 optim.step()
 
-                writer.add_scalar(
-                    "loss",
-                    loss.item(),
-                    i + (epoch * train_dataloader_len),
-                )
+                if i + (epoch * train_dataloader_len) % PRINT_EPOCH == 0:
+                    writer.add_scalar(
+                        "loss",
+                        loss.item(),
+                        i + (epoch * train_dataloader_len),
+                    )
+
             scheduler.step()
             writer.add_scalar("lr", scheduler.get_last_lr()[0], epoch)
-            writer.close()
 
             if epoch % SAVE_EPOCH == 0:
                 torch.save(
@@ -136,7 +153,7 @@ if __name__ == "__main__":
                     },
                     BASE_OUTPUT / f"temp_{epoch}",
                 )
-            
+
             if epoch % CHECK_VAL_EPOCH == 0:
                 model.eval()
                 with torch.no_grad():
@@ -152,9 +169,10 @@ if __name__ == "__main__":
                             loss.item(),
                             i + (epoch * len(val_dataloader)),
                         )
-                        writer.close()
                 model.train()
-                
+
+            writer.close()
+
         torch.save(
             {
                 "model": model.state_dict(),

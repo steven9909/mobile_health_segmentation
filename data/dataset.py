@@ -20,15 +20,13 @@ class CuffDataset(Dataset):
         if self.transforms:
             image, mask = self.transforms(image, mask)
 
-        mask = np.expand_dims(mask, axis=-1)
-
         image = transforms.ToTensor()(np.array(image))
         mask = transforms.ToTensor()(np.array(mask))
 
         image = normalize(
             image,
-            mean=(0.5612, 0.5397, 0.5159),
-            std=(0.2515, 0.2405, 0.2317),
+            mean=(0.5687, 0.5434, 0.5152),
+            std=(0.2508, 0.2399, 0.2307),
         )
 
-        return image, mask
+        return image, mask.squeeze(0).long()
