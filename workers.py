@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import cv2
 
 
 class Worker:
@@ -17,22 +18,24 @@ class Worker:
 
 
 class DelegationWorker(Worker):
-    def __init__(self, process_event, done_event):
-        super().__init__(process_event, done_event)
+    def __init__(self, process_event, done_event, file_str):
+        super().__init__(process_event, done_event, file_str)
 
-    def run(self, process_event, done_event):
+    def run(self, process_event, done_event, file_str):
         seg_process_event = mp.Event()
         pose_process_event = mp.Event()
         seg_done_event = mp.Event()
         pose_done_event = mp.Event()
 
-        _ = SegmentationModelWorker(seg_process_event, seg_done_event)
-        _ = PoseEstimatorWorker(pose_process_event, pose_done_event)
+        _ = SegmentationModelWorker(seg_process_event, seg_done_event, file_str)
+        _ = PoseEstimatorWorker(pose_process_event, pose_done_event, file_str)
 
         while True:
             process_event.wait()
             process_event.clear()
             print("Delegation Worker Processing")
+
+            image = cv2.imread(file_str.value)
 
             seg_process_event.set()
             pose_process_event.set()
@@ -58,19 +61,19 @@ class DelegationWorker(Worker):
 
 
 class ModelWorker(Worker):
-    def __init__(self, process_event, done_event):
-        super().__init__(process_event, done_event)
+    def __init__(self, process_event, done_event, file_str):
+        super().__init__(process_event, done_event, file_str)
 
-    def block(self):
+    def block(self, file_str):
         raise NotImplementedError
 
-    def run(self, process_event, done_event):
+    def run(self, process_event, done_event, file_str):
         while True:
             process_event.wait()
             process_event.clear()
             print(f"{self.__class__.__name__} Processing")
 
-            self.block()
+            self.block(file_str)
 
             done_event.set()
             print(f"{self.__class__.__name__} Done")
@@ -80,7 +83,7 @@ class SegmentationModelWorker(ModelWorker):
     def __init__(self, process_event, done_event):
         super().__init__(process_event, done_event)
 
-    def block(self):
+    def block(self, file_str):
         pass
 
 
@@ -88,5 +91,5 @@ class PoseEstimatorWorker(ModelWorker):
     def __init__(self, process_event, done_event):
         super().__init__(process_event, done_event)
 
-    def block(self):
+    def block(self, file_str):
         pass
