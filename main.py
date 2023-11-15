@@ -18,8 +18,6 @@ if __name__ == "__main__":
     process_event = mp.Event()
     done_event = mp.Event()
 
-    file_queue = mp.Queue()
-
     manager = mp.Manager()
     file_str = manager.Value("c", str(save_dir / "frame.jpg"))
 
