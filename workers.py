@@ -27,7 +27,7 @@ class DelegationWorker(Worker):
         pose_done_event = mp.Event()
 
         _ = SegmentationModelWorker(seg_process_event, seg_done_event)
-        _ = PostEstimatorWorker(pose_process_event, pose_done_event)
+        _ = PoseEstimatorWorker(pose_process_event, pose_done_event)
 
         while True:
             process_event.wait()
