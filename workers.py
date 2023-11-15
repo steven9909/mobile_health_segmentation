@@ -84,7 +84,7 @@ class SegmentationModelWorker(ModelWorker):
         pass
 
 
-class PostEstimatorWorker(ModelWorker):
+class PoseEstimatorWorker(ModelWorker):
     def __init__(self, process_event, done_event):
         super().__init__(process_event, done_event)
 
