@@ -7,6 +7,9 @@ from PIL import Image
 
 from utils import print_d
 
+import torch
+from torchvision.transforms.functional import normalize
+
 
 class Worker:
     def __init__(self, args):
@@ -101,10 +104,42 @@ class SegmentationModelWorker(ModelWorker):
         super().__init__((process_event, done_event, file_str, seg_ret))
 
     def pre_block(self, process_event, done_event, file_str, seg_ret):
-        pass
+        self.device = torch.device("cpu")
+        self.model = torch.hub.load(
+            "milesial/Pytorch-UNet",
+            "unet_carvana",
+            pretrained=True,
+            scale=1,
+        )
+        self.model.load_state_dict(
+            torch.load("./segmentation/output/unet.pth")["model"]
+        )
+        self.model = self.model.to(self.device)
+        self.model.eval()
 
     def block(self, process_event, done_event, file_str, seg_ret):
-        pass
+        r_image = Image.open(file_str.value).convert("RGB")
+
+        image = np.asarray(r_image, dtype=np.float32) / 255
+
+        r_image.close()
+
+        image = image.transpose((2, 0, 1))
+        image = torch.from_numpy(image).to(self.device)
+        image = normalize(
+            image, mean=(0.5687, 0.5434, 0.5152), std=(0.2508, 0.2399, 0.2307)
+        )
+        image = torch.unsqueeze(image, 0)
+
+        output = self.model(image)
+
+        output = np.transpose(
+            np.squeeze(torch.sigmoid(output.detach()).cpu().numpy(), 0), (1, 2, 0)
+        )[:, :, 1]
+
+        out = Image.fromarray(output, mode="L")
+        out.save(seg_ret.value)
+        out.close()
 
 
 class PoseEstimatorWorker(ModelWorker):
