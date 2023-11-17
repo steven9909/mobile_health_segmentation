@@ -57,13 +57,19 @@ class DelegationWorker(Worker):
             pose_done_event.wait()
             pose_done_event.clear()
 
+            self.validate(pose_ret)
+
             # everything is done - get the result from segmentation and pose estimation and validate, scale, decide...
 
             done_event.set()
             print_d("Delegation Done")
 
-    def validate(self):
-        pass
+    def validate(self, pose_ret):
+        """Validate the output of segmentation model and pose estimation model
+
+        Args:
+            pose_ret (int []): array of size 18, containing the pose estimation result
+        """
 
     def scale(self):
         pass
