@@ -5,12 +5,11 @@ from pathlib import Path
 from ctypes import c_wchar_p
 
 import cv2
-import numpy as np
 
 from workers import DelegationWorker
 import time
 
-from utils import check_focus
+from utils import check_focus, print_d
 
 
 def show_error_box(error_msg):
@@ -39,15 +38,15 @@ if __name__ == "__main__":
     file_str = manager.Value(c_wchar_p, str(save_dir / "frame.jpg"))
 
     """
-        spi
-        nec
-        hea
-        r_wri
-        r_elb
-        r_sho
-        l_sho
-        l_elb
-        l_wri
+        spine
+        neck
+        head
+        r_wrist
+        r_elbow
+        r_shoulder
+        l_shoulder
+        l_elbow
+        l_wrist
     """
     pose_ret = mp.Array("i", [0] * 18)
     seg_ret = mp.Value(c_wchar_p, str(save_dir / "seg.png"))
@@ -56,7 +55,7 @@ if __name__ == "__main__":
         process_event, done_event, file_str, pose_ret, seg_ret
     )
 
-    print("Starting main loop")
+    print_d("Starting main loop")
 
     root = Tk()
     frm = ttk.Frame(root, padding=10)
