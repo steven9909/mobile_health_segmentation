@@ -17,13 +17,13 @@ class Worker:
     def join(self):
         self.process.join()
 
-    def run(self, args):
+    def run(self, *args):
         raise NotImplementedError
 
 
 class DelegationWorker(Worker):
     def __init__(self, process_event, done_event, file_str, pose_ret, seg_ret):
-        super().__init__(process_event, done_event, file_str, pose_ret, seg_ret)
+        super().__init__((process_event, done_event, file_str, pose_ret, seg_ret))
 
     def run(self, process_event, done_event, file_str, pose_ret, seg_ret):
         seg_process_event = mp.Event()
@@ -67,17 +67,17 @@ class DelegationWorker(Worker):
 
 
 class ModelWorker(Worker):
-    def __init__(self, *args):
+    def __init__(self, args):
         super().__init__(args)
 
-    def block(self, args):
+    def block(self, *args):
         raise NotImplementedError
 
-    def pre_block(self, args):
+    def pre_block(self, *args):
         raise NotImplementedError
 
-    def run(self, args):
-        self.pre_block(args)
+    def run(self, *args):
+        self.pre_block(*args)
 
         process_event = args[0]
         done_event = args[1]
@@ -87,7 +87,7 @@ class ModelWorker(Worker):
             process_event.clear()
             print(f"{self.__class__.__name__} Processing")
 
-            self.block(args)
+            self.block(*args)
 
             done_event.set()
             print(f"{self.__class__.__name__} Done")
@@ -95,41 +95,38 @@ class ModelWorker(Worker):
 
 class SegmentationModelWorker(ModelWorker):
     def __init__(self, process_event, done_event, file_str, seg_ret):
-        super().__init__(process_event, done_event, file_str, seg_ret)
+        super().__init__((process_event, done_event, file_str, seg_ret))
 
-    def pre_block(self, args):
+    def pre_block(self, process_event, done_event, file_str, seg_ret):
         pass
 
-    def block(self, args):
-        file_str = args[2]
-        seg_ret = args[3]
+    def block(self, process_event, done_event, file_str, seg_ret):
+        pass
 
 
 class PoseEstimatorWorker(ModelWorker):
     def __init__(self, process_event, done_event, file_str, pose_ret):
-        super().__init__(process_event, done_event, file_str, pose_ret)
+        super().__init__((process_event, done_event, file_str, pose_ret))
 
-    def pre_block(self, args):
+    def pre_block(self, process_event, done_event, file_str, pose_ret):
         core = ov.Core()
 
-        model = core.read_model(model="./model/human-pose-estimation.xml")
+        model = core.read_model(model="./pose/model/human-pose-estimation.xml")
         self.compiled_model = core.compile_model(model=model, device_name="CPU")
 
     def _extract_keypoints(self, heatmap, min_confidence=-100):
         ind = np.unravel_index(np.argmax(heatmap, axis=None), heatmap.shape)
+        print(heatmap[ind])
         if heatmap[ind] < min_confidence:
             ind = (-1, -1)
         else:
             ind = (int(ind[1]), int(ind[0]))
         return ind
 
-    def block(self, args):
-        file_str = args[2]
-        pose_ret = args[3]
-
+    def block(self, process_event, done_event, file_str, pose_ret):
         infer_request = self.compiled_model.create_infer_request()
 
-        image = Image.open(file_str)
+        image = Image.open(file_str.value)
         image.load()
         image = np.asarray(image, dtype=np.float32)
 

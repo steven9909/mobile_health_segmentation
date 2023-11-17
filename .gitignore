@@ -1,6 +1,9 @@
+# standard
 venv/
 .DS_Store
 __pycache__/
+
+# segmentation folder
 segmentation/runs/
 segmentation/data/config.yml
 segmentation/output/
@@ -10,3 +13,6 @@ segmentation/data/original
 segmentation/annotated
 segmentation/original
 segmentation/validation/
+
+# saved folder
+saved/
