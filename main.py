@@ -3,6 +3,11 @@ from workers import DelegationWorker
 import multiprocessing as mp
 from pathlib import Path
 
+
+def check_focus(image):
+    pass
+
+
 if __name__ == "__main__":
     frame_width = 1440
     frame_height = 960
@@ -23,10 +28,24 @@ if __name__ == "__main__":
 
     delegation = DelegationWorker(process_event, done_event, file_str)
 
+    """
+        spi
+        nec
+        hea
+        r_wri
+        r_elb
+        r_sho
+        l_sho
+        l_elb
+        l_wri
+    """
+    pose_ret = mp.Array("i", [0] * 18)
+    seg_ret = mp.Value("c", str(save_dir / "seg.png"))
+
     while True:
         ret, frame = cap.read()
 
-        if not ret:
+        if not ret or not check_focus(frame):
             break
 
         frame = cv2.resize(
@@ -37,3 +56,5 @@ if __name__ == "__main__":
         process_event.set()  # we are ready to pass off the image to the Delegation worker
         done_event.wait()  # wait for the delegation worker to finish
         done_event.clear()  # clear the flag
+
+        # pose_ret contains the pose information
