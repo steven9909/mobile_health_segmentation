@@ -2,7 +2,6 @@ from tkinter import messagebox, Tk, ttk
 
 import multiprocessing as mp
 from pathlib import Path
-from ctypes import c_wchar_p
 
 import cv2
 
@@ -58,7 +57,7 @@ if __name__ == "__main__":
     print_d("Starting main loop")
 
     root = Tk()
-    frm = ttk.Frame(root, padding=10)
+    frm = ttk.Frame(root, width=1000, height=10000, padding=10)
     frm.grid()
     ttk.Label(frm, text="Hello World!").grid(column=0, row=0)
     ttk.Button(frm, text="Quit", command=root.destroy).grid(column=1, row=0)
