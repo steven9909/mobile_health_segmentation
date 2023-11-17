@@ -35,7 +35,7 @@ if __name__ == "__main__":
     done_event = mp.Event()
 
     manager = mp.Manager()
-    file_str = manager.Value(c_wchar_p, str(save_dir / "frame.jpg"))
+    file_str = manager.Value("c", str(save_dir / "frame.jpg"))
 
     """
         spine
@@ -48,8 +48,8 @@ if __name__ == "__main__":
         l_elbow
         l_wrist
     """
-    pose_ret = mp.Array("i", [0] * 18)
-    seg_ret = mp.Value(c_wchar_p, str(save_dir / "seg.png"))
+    pose_ret = manager.Array("i", [0] * 18)
+    seg_ret = manager.Value("c", str(save_dir / "seg.png"))
 
     delegation = DelegationWorker(
         process_event, done_event, file_str, pose_ret, seg_ret
