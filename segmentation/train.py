@@ -40,11 +40,11 @@ if __name__ == "__main__":
     # Using a single worker seems like it has the best performance
     num_workers = 0
 
-    img_dir = Path("original/")
-    mask_dir = Path("annotated/")
-    img_val_dir = Path("validation/original/")
-    mask_val_dir = Path("validation/annotated/")
-    BASE_OUTPUT = Path("output")
+    img_dir = Path("./segmentation/original")
+    mask_dir = Path("./segmentation/annotated")
+    img_val_dir = Path("./segmentation/validation/original")
+    mask_val_dir = Path("./segmentation/validation/annotated")
+    BASE_OUTPUT = Path("./segmentation/output")
     BASE_OUTPUT.mkdir(parents=True, exist_ok=True)
 
     MODEL_PATH = BASE_OUTPUT / "unet.pth"

@@ -71,8 +71,24 @@ class DelegationWorker(Worker):
             pose_ret (int []): array of size 18, containing the pose estimation result
         """
 
-    def scale(self):
-        pass
+    def scale(self, pose_ret, seg_ret):
+        CUFF_LENGTH = 10  # cm
+        seg_result = Image.open(seg_ret.value).convert("L")
+
+        """
+            spine
+            neck
+            head
+            r_wrist
+            r_elbow
+            r_shoulder
+            l_shoulder
+            l_elbow
+            l_wrist
+        """
+        r_wrist_x, r_wrist_y = pose_ret[6], pose_ret[7]
+        r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
+        r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]
 
     def decide(self):
         pass
@@ -114,11 +130,14 @@ class SegmentationModelWorker(ModelWorker):
         self.model = torch.hub.load(
             "milesial/Pytorch-UNet",
             "unet_carvana",
-            pretrained=True,
+            pretrained=False,
             scale=1,
         )
         self.model.load_state_dict(
-            torch.load("./segmentation/output/unet.pth")["model"]
+            torch.load(
+                "./segmentation/output/unet.pth",
+                map_location=self.device,
+            )["model"]
         )
         self.model = self.model.to(self.device)
         self.model.eval()

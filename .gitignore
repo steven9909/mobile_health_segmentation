@@ -14,5 +14,9 @@ segmentation/annotated
 segmentation/original
 segmentation/validation/
 
+# pose folder
+pose/*.jpg
+pose/*.jpeg
+
 # saved folder
 saved/
