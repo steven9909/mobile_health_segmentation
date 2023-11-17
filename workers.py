@@ -5,6 +5,8 @@ import numpy as np
 import openvino as ov
 from PIL import Image
 
+from utils import print_d
+
 
 class Worker:
     def __init__(self, args):
@@ -39,9 +41,10 @@ class DelegationWorker(Worker):
         while True:
             process_event.wait()
             process_event.clear()
-            print("Delegation Worker Processing")
+            print_d("Delegation Worker Processing")
 
             image = cv2.imread(file_str.value)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             seg_process_event.set()
             pose_process_event.set()
@@ -54,7 +57,7 @@ class DelegationWorker(Worker):
             # everything is done - get the result from segmentation and pose estimation and validate, scale, decide...
 
             done_event.set()
-            print("Delegation Done")
+            print_d("Delegation Done")
 
     def validate(self):
         pass
@@ -85,12 +88,12 @@ class ModelWorker(Worker):
         while True:
             process_event.wait()
             process_event.clear()
-            print(f"{self.__class__.__name__} Processing")
+            print_d(f"{self.__class__.__name__} Processing")
 
             self.block(*args)
 
             done_event.set()
-            print(f"{self.__class__.__name__} Done")
+            print_d(f"{self.__class__.__name__} Done")
 
 
 class SegmentationModelWorker(ModelWorker):
@@ -116,7 +119,6 @@ class PoseEstimatorWorker(ModelWorker):
 
     def _extract_keypoints(self, heatmap, min_confidence=-100):
         ind = np.unravel_index(np.argmax(heatmap, axis=None), heatmap.shape)
-        print(heatmap[ind])
         if heatmap[ind] < min_confidence:
             ind = (-1, -1)
         else:
