@@ -1,4 +1,5 @@
 from tkinter import messagebox, Tk, ttk
+import tkinter as tk
 
 import multiprocessing as mp
 from pathlib import Path
@@ -10,16 +11,24 @@ import time
 
 from utils import check_focus, print_d
 
+from PIL import Image, ImageTk
+
 
 def show_error_box(error_msg):
     messagebox.showerror("ERROR", error_msg)
+
+
+def show_notification(notify_msg):
+    messagebox.showinfo("NOTIFICATION", notify_msg)
 
 
 if __name__ == "__main__":
     frame_width = 1440
     frame_height = 960
 
-    GUI_UPDATE_INTERVAL = 1000  # ms
+    GUI_UPDATE_INTERVAL = 500  # ms
+    REST_DURATION = 5 * 60  # s
+    skip_rest = True
 
     save_dir = Path("./saved")
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -57,18 +66,32 @@ if __name__ == "__main__":
     print_d("Starting main loop")
 
     root = Tk()
-    frm = ttk.Frame(root, width=1000, height=10000, padding=10)
-    frm.grid()
-    ttk.Label(frm, text="Hello World!").grid(column=0, row=0)
-    ttk.Button(frm, text="Quit", command=root.destroy).grid(column=1, row=0)
+    frm = ttk.Frame(root, width=1000, height=1000)
+    frm.grid(row=0, column=0, padx=10, pady=2)
+
+    label = tk.Label(frm)
+    label.grid(row=0, column=0)
+    cap = cv2.VideoCapture(0)
 
     cur_time = time.time() * 1000.0
+
+    first_launch = True
 
     while True:
         # update GUI
         if time.time() * 1000.0 - cur_time > GUI_UPDATE_INTERVAL:
             cur_time = time.time() * 1000.0
+            frame = cv2.flip(frame, 1)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+            img = Image.fromarray(frame)
+            imgtk = ImageTk.PhotoImage(image=img)
+            label.configure(image=imgtk)
             root.update()
+
+        if first_launch and not skip_rest:
+            show_notification("Please rest and sit still for 5 minutes")
+            time.sleep(REST_DURATION)
+            first_launch = False
 
         ret, frame = cap.read()
 

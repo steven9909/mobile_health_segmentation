@@ -1,7 +1,7 @@
 import cv2
 
 
-def check_focus(image, threshold=100):
+def check_focus(image, threshold=10):
     """Check whether the image is in focus or not using variance of Laplacian
 
     Args:
