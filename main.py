@@ -1,7 +1,9 @@
-import cv2
-from workers import DelegationWorker
 import multiprocessing as mp
 from pathlib import Path
+
+import cv2
+
+from workers import DelegationWorker
 
 
 def check_focus(image):
@@ -26,8 +28,6 @@ if __name__ == "__main__":
     manager = mp.Manager()
     file_str = manager.Value("c", str(save_dir / "frame.jpg"))
 
-    delegation = DelegationWorker(process_event, done_event, file_str)
-
     """
         spi
         nec
@@ -41,6 +41,10 @@ if __name__ == "__main__":
     """
     pose_ret = mp.Array("i", [0] * 18)
     seg_ret = mp.Value("c", str(save_dir / "seg.png"))
+
+    delegation = DelegationWorker(
+        process_event, done_event, file_str, pose_ret, seg_ret
+    )
 
     while True:
         ret, frame = cap.read()
@@ -58,3 +62,4 @@ if __name__ == "__main__":
         done_event.clear()  # clear the flag
 
         # pose_ret contains the pose information
+        # seg_ret points to segmentation result
