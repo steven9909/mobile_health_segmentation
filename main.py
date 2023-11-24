@@ -79,6 +79,9 @@ if __name__ == "__main__":
 
     first_launch = True
 
+    if first_launch:
+        pass
+
     while True:
         # update GUI
         if (
@@ -125,5 +128,3 @@ if __name__ == "__main__":
 
         # pose_ret contains the pose information
         # seg_ret points to segmentation result
-        print(seg_ret.value)
-        print(pose_ret[:])

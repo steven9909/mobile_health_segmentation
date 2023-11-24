@@ -11,6 +11,15 @@ import torch
 from torchvision.transforms.functional import normalize
 
 
+class ErrorState:
+    def __init__(self, error_msg):
+        self.error = False
+        self.error_msg = error_msg
+
+    def __str__(self):
+        return self.error_msg
+
+
 class Worker:
     def __init__(self, args):
         self.process = mp.Process(target=self.run, args=args)
@@ -47,7 +56,6 @@ class DelegationWorker(Worker):
             print_d("Delegation Worker Processing")
 
             image = cv2.imread(file_str.value)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             seg_process_event.set()
             pose_process_event.set()
@@ -58,6 +66,10 @@ class DelegationWorker(Worker):
             pose_done_event.clear()
 
             self.validate(pose_ret)
+
+            seg_image = cv2.imread(seg_ret.value)
+
+            self.skin_tone(pose_ret, seg_image, image)
 
             # everything is done - get the result from segmentation and pose estimation and validate, scale, decide...
 
@@ -70,6 +82,40 @@ class DelegationWorker(Worker):
         Args:
             pose_ret (int []): array of size 18, containing the pose estimation result
         """
+
+    def skin_tone(self, pose_ret, seg_image, image, radius=5):
+        """Get the skin tone of the person in the image
+
+        Args:
+            pose_ret (int []): array of size 18, containing the pose estimation result
+            seg_ret (str): path to the segmentation result
+            image (np.ndarray): the image
+        """
+
+        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        lower_skin = np.array([0, 48, 80], dtype=np.uint8)
+        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+
+        mask_skin = cv2.inRange(hsv_image, lower_skin, upper_skin)
+
+        neck_x, neck_y = pose_ret[2:4]
+
+        mask_spot = np.zeros(image.shape[:2], dtype="uint8")
+
+        cv2.circle(mask_spot, (neck_x, neck_y - radius), radius, 255, -1)
+
+        mask = cv2.bitwise_and(mask_skin, mask_spot)
+
+        mask = cv2.bitwise_and(image, image, mask=mask)
+
+        predicted_skin_colour_b = np.mean(mask[..., 0])
+        predicted_skin_colour_g = np.mean(mask[..., 1])
+        predicted_skin_colour_r = np.mean(mask[..., 2])
+
+        print_d(
+            f"skin colour {predicted_skin_colour_r}, {predicted_skin_colour_g}, {predicted_skin_colour_b}"
+        )
 
     def scale(self, pose_ret, seg_ret):
         CUFF_LENGTH = 10  # cm
