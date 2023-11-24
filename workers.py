@@ -71,24 +71,121 @@ class DelegationWorker(Worker):
             pose_ret (int []): array of size 18, containing the pose estimation result
         """
 
-    def scale(self, pose_ret, seg_ret):
-        CUFF_LENGTH = 10  # cm
-        seg_result = Image.open(seg_ret.value).convert("L")
+        num_kpts = 0
+        missing = []
+        kpt_names = ["Spine", "Neck", "Head", "Right wrist", "Right elbow", "Right shoulder", "Left shoulder", "Left elbow", "Left wrist"]
 
-        """
-            spine
-            neck
-            head
-            r_wrist
-            r_elbow
-            r_shoulder
-            l_shoulder
-            l_elbow
-            l_wrist
-        """
-        r_wrist_x, r_wrist_y = pose_ret[6], pose_ret[7]
-        r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
-        r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]
+        # 1. Check if all keypoints are in frame
+        for kp in range(0, 9, 2):
+            # Skip head keypoint
+            if kp == 2:
+                continue
+
+            # Check if keypoint exists, i.e. not zero; else note it down
+            if pose_ret[2*kp] != 0:
+                num_kpts += 1
+            else: 
+                missing.append(kpt_names[kp])
+
+        # Report if the missing keypoints to user
+        if num_kpts != 8:
+            print(f"Make sure your {', '.join(missing)} are in frame.")
+
+        # 2. Check if both shoulders are level
+        import math
+
+        should_x = abs(pose_ret[12] - pose_ret[10])
+        should_y = abs(pose_ret[13] - pose_ret[11])
+        should_ang = math.degrees(math.atan(should_y/should_x))
+        max_ang = 10
+
+        if should_ang > max_ang:
+            if(pose_ret[13] > pose_ret[11]):
+                higher, lower = "left shoulder", "right shoulder"
+            else:
+                higher, lower = "right shoulder", "left_shoulder"
+
+            print(f"Your {higher} is higher than your {lower} shoulder. Please make sure you are sitting straight.") 
+
+        # 3. Check if neck and spine are aligned
+        abdomen_x = abs(pose_ret[2] - pose_ret[0])
+        abdomen_y = abs(pose_ret[3] - pose_ret[1])
+        abdomen_hyp = math.hypot(abdomen_x, abdomen_y)
+        abdomen_ang = math.degrees(math.acos(abdomen_y/abdomen_hyp))
+        
+        if abdomen_ang > max_ang:
+            print("Your neck and your spine are not aligned. Please sit straight.")        
+
+        # 3. Calculate optimal locations based on angles
+
+        optang_es = 5
+        optang_ew = 25
+
+        r_wri = [pose_ret[6], pose_ret[7]]
+        r_elb = [pose_ret[8], pose_ret[9]]
+        r_sho = [pose_ret[10], pose_ret[11]]
+
+        l_sho = [pose_ret[12], pose_ret[13]]
+        l_elb = [pose_ret[14], pose_ret[15]]
+        l_wri = [pose_ret[16], pose_ret[17]]
+
+        r_rad_es = math.hypot(abs(r_sho[1] - r_elb[1]), abs(r_sho[0] - r_elb[0]))
+        r_rad_ew = math.hypot(abs(r_wri[1] - r_elb[1]), abs(r_wri[0] - r_elb[0]))
+        l_rad_es = math.hypot(abs(l_sho[1] - l_elb[1]), abs(l_sho[0] - l_elb[0]))
+        l_rad_ew = math.hypot(abs(l_wri[1] - l_elb[1]), abs(l_wri[0] - l_elb[0]))
+
+        l_opt_elbow = [l_sho[0] + l_rad_es*math.cos(math.radians(90 - optang_es)), l_sho[1] + l_rad_es*math.sin(math.radians(90 - optang_es))]
+        r_opt_elbow = [r_sho[0] + r_rad_es*math.cos(math.radians(90 + optang_es)), r_sho[1] + r_rad_es*math.sin(math.radians(90 + optang_es))]
+
+        l_opt_wrist = [l_elb[0] + l_rad_ew*math.cos(math.radians(90 - optang_ew)), l_elb[1] + l_rad_ew*math.sin(math.radians(90 + optang_ew))]
+        r_opt_wrist = [r_elb[0] + r_rad_ew*math.cos(math.radians(90 + optang_ew)), r_elb[1] + r_rad_ew*math.sin(math.radians(90 + optang_ew))]
+
+        # 4. Check if valid arm positions
+
+        # Elbow shoulder angle
+        r_es_x = abs(r_elb[0] - r_sho[0])
+        r_es_y = abs(r_elb[1] - r_sho[1])
+        r_es_ang = math.degrees(math.atan(r_es_x/(r_es_y + 1)))
+
+        l_es_x = abs(l_elb[0] - l_sho[0])
+        l_es_y = abs(l_elb[1] - l_sho[1])
+        l_es_ang = math.degrees(math.atan(l_es_x/(l_es_y + 1)))
+
+        # Elbow wrist angle
+        r_ew_x = abs(l_elb[0] - l_wri[0])
+        r_ew_y = abs(r_elb[1] - r_wri[1])
+        r_ew_ang = math.degrees(math.atan(r_ew_x/(r_ew_y + 1)))
+
+        l_ew_x = abs(l_elb[0] - l_wri[0])
+        l_ew_y = abs(l_elb[1] - l_wri[1])
+        l_ew_ang = math.degrees(math.atan(l_ew_x/(l_ew_y + 1)))
+
+        # 1 is higher, -1 is lower, 0 is good
+        check = []
+        if abs(r_es_ang - optang_es) > 5:
+            check.append(np.sign(r_es_ang - optang_es))
+        else:
+            check.append(0)
+
+        if abs(l_es_ang - optang_es) > 5:
+            check.append(np.sign(l_es_ang - optang_es))
+        else:
+            check.append(0)
+
+        if abs(r_ew_ang - optang_ew) > 10:
+            check.append(np.sign(r_ew_ang - optang_ew))
+        else:
+            check.append(0)
+
+        if abs(l_ew_ang - optang_ew) > 10:
+            check.append(np.sign(l_ew_ang - optang_ew))
+        else:
+            check.append(0)
+
+        return l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist
+    
+    def scale(self):
+        pass
 
     def decide(self):
         pass
@@ -130,14 +227,11 @@ class SegmentationModelWorker(ModelWorker):
         self.model = torch.hub.load(
             "milesial/Pytorch-UNet",
             "unet_carvana",
-            pretrained=False,
+            pretrained=True,
             scale=1,
         )
         self.model.load_state_dict(
-            torch.load(
-                "./segmentation/output/unet.pth",
-                map_location=self.device,
-            )["model"]
+            torch.load("./segmentation/output/unet.pth")["model"]
         )
         self.model = self.model.to(self.device)
         self.model.eval()
