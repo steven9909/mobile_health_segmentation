@@ -29,4 +29,4 @@ class CuffDataset(Dataset):
             std=(0.2508, 0.2399, 0.2307),
         )
 
-        return image, mask.squeeze(0).long()
+        return image, mask.squeeze(0)
