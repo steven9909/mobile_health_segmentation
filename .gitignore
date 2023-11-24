@@ -17,6 +17,7 @@ segmentation/test.jpg
 
 # pose folder
 pose/*.jpg
+pose/unet.pth
 pose/*.jpeg
 
 # saved folder
