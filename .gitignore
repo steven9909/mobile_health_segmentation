@@ -5,6 +5,8 @@ __pycache__/
 output/*
 runs/
 
+runs/
+
 # segmentation folder
 segmentation/runs/
 segmentation/data/config.yml
