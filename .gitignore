@@ -2,7 +2,7 @@
 venv/
 .DS_Store
 __pycache__/
-
+output/*
 runs/
 
 # segmentation folder
