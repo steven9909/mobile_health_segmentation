@@ -11,6 +11,15 @@ import torch
 from torchvision.transforms.functional import normalize
 
 
+class ErrorState:
+    def __init__(self, error_msg):
+        self.error = False
+        self.error_msg = error_msg
+
+    def __str__(self):
+        return self.error_msg
+
+
 class Worker:
     def __init__(self, args):
         self.process = mp.Process(target=self.run, args=args)
@@ -47,7 +56,6 @@ class DelegationWorker(Worker):
             print_d("Delegation Worker Processing")
 
             image = cv2.imread(file_str.value)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             seg_process_event.set()
             pose_process_event.set()
@@ -58,6 +66,10 @@ class DelegationWorker(Worker):
             pose_done_event.clear()
 
             self.validate(pose_ret)
+
+            seg_image = cv2.imread(seg_ret.value)
+
+            self.skin_tone(pose_ret, seg_image, image)
 
             # everything is done - get the result from segmentation and pose estimation and validate, scale, decide...
 
@@ -89,7 +101,7 @@ class DelegationWorker(Worker):
 
         # Report if the missing keypoints to user
         if num_kpts != 8:
-            print(f"Make sure your {', '.join(missing)} are in frame.")
+            return ErrorState(f"{', '.join(missing)} not in frame.")
 
         # 2. Check if both shoulders are level
         import math
@@ -105,7 +117,7 @@ class DelegationWorker(Worker):
             else:
                 higher, lower = "right shoulder", "left_shoulder"
 
-            print(f"Your {higher} is higher than your {lower} shoulder. Please make sure you are sitting straight.") 
+            return ErrorState(f"Your {higher} is higher than your {lower} shoulder. Please make sure you are sitting straight.") 
 
         # 3. Check if neck and spine are aligned
         abdomen_x = abs(pose_ret[2] - pose_ret[0])
@@ -114,7 +126,7 @@ class DelegationWorker(Worker):
         abdomen_ang = math.degrees(math.acos(abdomen_y/abdomen_hyp))
         
         if abdomen_ang > max_ang:
-            print("Your neck and your spine are not aligned. Please sit straight.")        
+            return ErrorState("Your neck and your spine are not aligned. Please sit straight.")        
 
         # 3. Calculate optimal locations based on angles
 
@@ -160,29 +172,50 @@ class DelegationWorker(Worker):
         l_ew_y = abs(l_elb[1] - l_wri[1])
         l_ew_ang = math.degrees(math.atan(l_ew_x/(l_ew_y + 1)))
 
-        # 1 is higher, -1 is lower, 0 is good
-        check = []
-        if abs(r_es_ang - optang_es) > 5:
-            check.append(np.sign(r_es_ang - optang_es))
-        else:
-            check.append(0)
-
-        if abs(l_es_ang - optang_es) > 5:
-            check.append(np.sign(l_es_ang - optang_es))
-        else:
-            check.append(0)
-
-        if abs(r_ew_ang - optang_ew) > 10:
-            check.append(np.sign(r_ew_ang - optang_ew))
-        else:
-            check.append(0)
-
-        if abs(l_ew_ang - optang_ew) > 10:
-            check.append(np.sign(l_ew_ang - optang_ew))
-        else:
-            check.append(0)
+        check = [abs(r_es_ang - optang_es) > max_ang, 
+                 abs(l_es_ang - optang_es) > max_ang, 
+                 abs(r_ew_ang - optang_ew) > max_ang,
+                 abs(l_ew_ang - optang_ew) > max_ang]
+        
+        if sum(check) > 0:
+            return ErrorState("Your arms are not in the right position.")
 
         return l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist
+    
+
+    def skin_tone(self, pose_ret, seg_image, image, radius=5):
+        """Get the skin tone of the person in the image
+
+        Args:
+            pose_ret (int []): array of size 18, containing the pose estimation result
+            seg_ret (str): path to the segmentation result
+            image (np.ndarray): the image
+        """
+
+        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        lower_skin = np.array([0, 48, 80], dtype=np.uint8)
+        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+
+        mask_skin = cv2.inRange(hsv_image, lower_skin, upper_skin)
+
+        neck_x, neck_y = pose_ret[2:4]
+
+        mask_spot = np.zeros(image.shape[:2], dtype="uint8")
+
+        cv2.circle(mask_spot, (neck_x, neck_y - radius), radius, 255, -1)
+
+        mask = cv2.bitwise_and(mask_skin, mask_spot)
+
+        mask = cv2.bitwise_and(image, image, mask=mask)
+
+        predicted_skin_colour_b = np.mean(mask[..., 0])
+        predicted_skin_colour_g = np.mean(mask[..., 1])
+        predicted_skin_colour_r = np.mean(mask[..., 2])
+
+        print_d(
+            f"skin colour {predicted_skin_colour_r}, {predicted_skin_colour_g}, {predicted_skin_colour_b}"
+        )
     
     def scale(self):
         pass

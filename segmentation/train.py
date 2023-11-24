@@ -27,24 +27,24 @@ def show_image(image, mask):
 if __name__ == "__main__":
     args = ArgParser().parse_args()
 
-    PATCH_SIZE = 256
+    PATCH_SIZE = 512
 
     SAVE_EPOCH = 500
     CHECK_VAL_EPOCH = 50
     PRINT_EPOCH = 10
     BATCH_SIZE = 32
 
-    MAX_EPOCHS = 10000
-    init_lr = 1e-5
+    MAX_EPOCHS = 40000
+    init_lr = 5e-6
 
     # Using a single worker seems like it has the best performance
     num_workers = 0
 
-    img_dir = Path("./segmentation/original")
-    mask_dir = Path("./segmentation/annotated")
-    img_val_dir = Path("./segmentation/validation/original")
-    mask_val_dir = Path("./segmentation/validation/annotated")
-    BASE_OUTPUT = Path("./segmentation/output")
+    img_dir = Path("./original")
+    mask_dir = Path("./annotated")
+    img_val_dir = Path("./validation/original")
+    mask_val_dir = Path("./validation/annotated")
+    BASE_OUTPUT = Path("./output")
     BASE_OUTPUT.mkdir(parents=True, exist_ok=True)
 
     MODEL_PATH = BASE_OUTPUT / "unet.pth"
@@ -116,8 +116,24 @@ if __name__ == "__main__":
     model = model.to(device)
     model.train()
 
-    loss_fn = nn.CrossEntropyLoss()
+    loss_fn = nn.CrossEntropyLoss(reduction="none")
     # loss_fn = sigmoid_focal_loss
+
+    def dice_loss(input, target, classes):
+        smooth = 1.0
+
+        input = torch.softmax(input, 1)
+        dice = 0
+        for class_i in range(classes):
+            input_f = input[:, class_i, :, :]
+            target_f = target == class_i
+
+            intersect = (input_f * target_f).sum()
+            union = input_f.sum() + target_f.sum() + smooth
+
+            dice += (2.0 * intersect + smooth) / union
+
+        return 1 - dice / classes
 
     for epoch in tqdm(range(start_epoch, MAX_EPOCHS)):
         for i, (data, mask) in enumerate(train_dataloader):
@@ -127,7 +143,7 @@ if __name__ == "__main__":
             mask = mask.to(device)
 
             output = model(data)
-            loss = loss_fn(output, mask)
+            loss = dice_loss(output, mask, 2)
             # show_image(data[0], mask[0])
 
             loss.backward()
@@ -161,7 +177,7 @@ if __name__ == "__main__":
                     mask = mask.to(device)
 
                     output = model(data)
-                    loss = loss_fn(output, mask)
+                    loss = dice_loss(output, mask, 2)
 
                     writer.add_scalar(
                         "val_loss",

@@ -3,6 +3,8 @@ venv/
 .DS_Store
 __pycache__/
 
+runs/
+
 # segmentation folder
 segmentation/runs/
 segmentation/data/config.yml
@@ -17,6 +19,7 @@ segmentation/test.jpg
 
 # pose folder
 pose/*.jpg
+pose/unet.pth
 pose/*.jpeg
 
 # saved folder
