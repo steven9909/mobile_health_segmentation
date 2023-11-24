@@ -15,9 +15,11 @@ segmentation/data/original
 segmentation/annotated
 segmentation/original
 segmentation/validation/
+segmentation/test.jpg
 
 # pose folder
 pose/*.jpg
+pose/unet.pth
 pose/*.jpeg
 
 # saved folder

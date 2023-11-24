@@ -27,7 +27,7 @@ def show_image(image, mask):
 if __name__ == "__main__":
     args = ArgParser().parse_args()
 
-    PATCH_SIZE = 256
+    PATCH_SIZE = 512
 
     SAVE_EPOCH = 500
     CHECK_VAL_EPOCH = 50

@@ -25,8 +25,8 @@ class CuffDataset(Dataset):
 
         image = normalize(
             image,
-            mean=(0.5687, 0.5434, 0.5152),
-            std=(0.2508, 0.2399, 0.2307),
+            mean=(0.5612, 0.5397, 0.5161),
+            std=(0.2518, 0.2403, 0.2309),
         )
 
         return image, mask.squeeze(0)

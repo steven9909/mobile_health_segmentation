@@ -66,11 +66,13 @@ if __name__ == "__main__":
     print_d("Starting main loop")
 
     root = Tk()
-    frm = ttk.Frame(root, width=1000, height=1000)
+    frm = ttk.Frame(root, width=256, height=256)
     frm.grid(row=0, column=0, padx=10, pady=2)
 
     label = tk.Label(frm)
     label.grid(row=0, column=0)
+    notify_label = tk.Label(frm)
+    notify_label.grid(row=1, column=0)
     cap = cv2.VideoCapture(0)
 
     cur_time = time.time() * 1000.0
@@ -79,11 +81,20 @@ if __name__ == "__main__":
 
     while True:
         # update GUI
-        if time.time() * 1000.0 - cur_time > GUI_UPDATE_INTERVAL:
+        if (
+            time.time() * 1000.0 - cur_time > GUI_UPDATE_INTERVAL
+            and prev_successful_frame is not None
+        ):
             cur_time = time.time() * 1000.0
-            frame = cv2.flip(frame, 1)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-            img = Image.fromarray(frame)
+            prev_successful_frame = cv2.flip(prev_successful_frame, 1)
+            for p in range(0, len(pose_ret), 2):
+                cv2.circle(
+                    prev_successful_frame, pose_ret[p : p + 2], 5, (0, 255, 0), -1
+                )
+            prev_successful_frame = cv2.cvtColor(
+                prev_successful_frame, cv2.COLOR_BGR2RGBA
+            )
+            img = Image.fromarray(prev_successful_frame)
             imgtk = ImageTk.PhotoImage(image=img)
             label.configure(image=imgtk)
             root.update()
@@ -96,14 +107,17 @@ if __name__ == "__main__":
         ret, frame = cap.read()
 
         if not ret or not (focus := check_focus(frame)):
-            show_error_box(
-                f"Camera is not in focus or not connected, camera status={ret}, is focused={focus}"
-            )
+            notify_label.configure(text="Camera is not in focus or not connected")
+            root.update()
             continue
+        else:
+            notify_label.configure(text="")
+            root.update()
 
         frame = cv2.resize(
             frame, (patch_size, patch_size), interpolation=cv2.INTER_CUBIC
         )
+        prev_successful_frame = frame
         cv2.imwrite(str(save_dir / "frame.jpg"), frame)
         process_event.set()  # we are ready to pass off the image to the Delegation worker
         done_event.wait()  # wait for the delegation worker to finish
