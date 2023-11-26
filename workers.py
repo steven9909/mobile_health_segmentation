@@ -212,12 +212,12 @@ class DelegationWorker(Worker):
         # If shoulders misaligned, send feedback for how to adjust
         if should_ang > max_ang:
             if pose_ret[13] > pose_ret[11]:
-                higher, lower = "left shoulder", "right shoulder"
+                higher, lower = "right shoulder", "left shoulder"
             else:
-                higher, lower = "right shoulder", "left_shoulder"
+                higher, lower = "left shoulder", "right shoulder"
 
             return ErrorState(
-                f"Your {higher} is higher than your {lower} shoulder. Please make sure you are sitting straight."
+                f"Your {higher} is higher than your {lower}. Please make sure they are level."
             )
 
         # 3. Check if neck and spine are aligned
