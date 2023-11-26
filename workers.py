@@ -47,10 +47,38 @@ class Worker:
 
 
 class DelegationWorker(Worker):
-    def __init__(self, process_event, done_event, file_str, pose_ret, seg_ret):
-        super().__init__((process_event, done_event, file_str, pose_ret, seg_ret))
+    def __init__(
+        self,
+        process_event,
+        done_event,
+        file_str,
+        pose_ret,
+        correct_pose,
+        seg_ret,
+        error_msg,
+    ):
+        super().__init__(
+            (
+                process_event,
+                done_event,
+                file_str,
+                pose_ret,
+                correct_pose,
+                seg_ret,
+                error_msg,
+            )
+        )
 
-    def run(self, process_event, done_event, file_str, pose_ret, seg_ret):
+    def run(
+        self,
+        process_event,
+        done_event,
+        file_str,
+        pose_ret,
+        correct_pose,
+        seg_ret,
+        error_msg,
+    ):
         seg_process_event = mp.Event()
         pose_process_event = mp.Event()
         seg_done_event = mp.Event()
@@ -71,22 +99,31 @@ class DelegationWorker(Worker):
             seg_process_event.set()
             pose_process_event.set()
 
-            seg_done_event.wait()
-            seg_done_event.clear()
             pose_done_event.wait()
             pose_done_event.clear()
 
-            # self.validate(pose_ret)
+            seg_done_event.wait()
+            seg_done_event.clear()
+
+            state = self.validate(pose_ret)
+            print(state)
+            if state == ErrorState:
+                error_msg.value = str(state)
+                done_event.set()
+                continue
+            else:
+                error_msg.value = ""
+
+            correct_pose = self.get_overlay(pose_ret)
+
             seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
-
-            self.skin_tone(pose_ret, seg_image, image)
-
-            # everything is done - get the result from segmentation and pose estimation and validate, scale, decide...
+            distance = self.skin_tone(pose_ret, seg_image, image)
+            print(distance)
 
             done_event.set()
             print_d("Delegation Done")
 
-    def getoverlay(self, pose_ret, optang_es=5, optang_ew=25):
+    def get_overlay(self, pose_ret, optang_es=5, optang_ew=25):
         r_wri = [pose_ret[6], pose_ret[7]]
         r_elb = [pose_ret[8], pose_ret[9]]
         r_sho = [pose_ret[10], pose_ret[11]]
@@ -256,7 +293,6 @@ class DelegationWorker(Worker):
             + (std1_cb - std2_cb) ** 2
             + (std1_cr - std2_cr) ** 2
         )
-        print(distance)
 
         return distance
 
@@ -287,7 +323,7 @@ class DelegationWorker(Worker):
 
         patch2 = cv2.bitwise_and(image, image, mask=mask_arm)
 
-        self._compare_patches(patch1, patch2)
+        return self._compare_patches(patch1, patch2)
 
     def scale(self, pose_ret, seg_ret):
         CUFF_LENGTH = 10  # cm
@@ -488,17 +524,16 @@ class AudioWorker(Worker):
     def __init__(self, audio_ret):
         super().__init__([audio_ret])
 
-    def _is_loud_noise(self, data, threshold):
+    def _measure_rms(self, data):
         rms = audioop.rms(data, 2)
         decibels = 20 * math.log10(rms) if rms > 0 else 0
-        return decibels > threshold
+        return int(decibels)
 
     def run(self, audio_ret):
         FORMAT = pyaudio.paInt16
         CHANNELS = 1
         RATE = 44100
         CHUNK = 1024
-        THRESHOLD = 5  # dB
         audio = pyaudio.PyAudio()
 
         stream = audio.open(
@@ -511,7 +546,4 @@ class AudioWorker(Worker):
 
         while True:
             data = stream.read(CHUNK)
-            if self._is_loud_noise(data, THRESHOLD):
-                audio_ret.value = 1
-            else:
-                audio_ret.value = 0
+            audio_ret.value = self._measure_rms(data)

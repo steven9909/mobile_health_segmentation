@@ -28,6 +28,7 @@ if __name__ == "__main__":
 
     GUI_UPDATE_INTERVAL = 500  # ms
     REST_DURATION = 5 * 60  # s
+    AUDIO_THRESHOLD = 50  # db
     skip_rest = True
 
     save_dir = Path("./saved")
@@ -57,11 +58,13 @@ if __name__ == "__main__":
         l_wrist
     """
     pose_ret = manager.Array("i", [0] * 18)
+    correct_pose = manager.Array("i", [0] * 4)
     seg_ret = manager.Value("c", str(save_dir / "seg.png"))
     audio_ret = manager.Value("i", 0)
+    error_msg = manager.Value("c", "")
 
     delegation = DelegationWorker(
-        process_event, done_event, file_str, pose_ret, seg_ret
+        process_event, done_event, file_str, pose_ret, correct_pose, seg_ret, error_msg
     )
 
     audio = AudioWorker(audio_ret)
@@ -74,8 +77,14 @@ if __name__ == "__main__":
 
     label = tk.Label(frm)
     label.grid(row=0, column=0)
+
     notify_label = tk.Label(frm)
     notify_label.grid(row=1, column=0)
+    error_label = tk.Label(frm)
+    error_label.grid(row=2, column=0)
+    audio_label = tk.Label(frm)
+    audio_label.grid(row=3, column=0)
+
     cap = cv2.VideoCapture(0)
 
     cur_time = time.time() * 1000.0
@@ -127,11 +136,23 @@ if __name__ == "__main__":
         process_event.set()  # we are ready to pass off the image to the Delegation worker
 
         while not done_event.is_set():
-            if audio_ret.value == 1:
-                notify_label.configure(text="Please avoid loud noises and do not talk")
-                root.update()
+            if audio_ret.value > AUDIO_THRESHOLD:
+                audio_label.configure(
+                    text=f"Audio level = {audio_ret.value}. Please do not talk"
+                )
+                audio_label.configure(fg="red")
+            else:
+                audio_label.configure(text=f"Audio level = {audio_ret.value}")
+                audio_label.configure(fg="SystemButtonFace")
+            root.update()
 
-        done_event.clear()  # clear the flag
+        if error_msg.value != "":
+            error_label.configure(text=error_msg.value)
+            error_label.configure(fg="red")
+            done_event.clear()
+            continue
+        else:
+            error_label.configure(text="")
+            error_label.configure(fg="SystemButtonFace")
 
-        # pose_ret contains the pose information
-        # seg_ret points to segmentation result
+        done_event.clear()
