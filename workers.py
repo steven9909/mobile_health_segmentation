@@ -21,6 +21,10 @@ class ErrorState:
     def __str__(self):
         return self.error_msg
 
+class SuccessState:
+    def __init__(self):
+        pass
+
 
 class Worker:
     def __init__(self, args):
@@ -79,13 +83,131 @@ class DelegationWorker(Worker):
             done_event.set()
             print_d("Delegation Done")
 
-    def validate(self, pose_ret):
+      def getoverlay(self, pose_ret, optang_es=5, optang_ew=25):
+        r_wri = [pose_ret[6], pose_ret[7]]
+        r_elb = [pose_ret[8], pose_ret[9]]
+        r_sho = [pose_ret[10], pose_ret[11]]
+
+        l_sho = [pose_ret[12], pose_ret[13]]
+        l_elb = [pose_ret[14], pose_ret[15]]
+        l_wri = [pose_ret[16], pose_ret[17]]
+
+        r_rad_es = math.hypot(abs(r_sho[1] - r_elb[1]), abs(r_sho[0] - r_elb[0]))
+        r_rad_ew = math.hypot(abs(r_wri[1] - r_elb[1]), abs(r_wri[0] - r_elb[0]))
+        l_rad_es = math.hypot(abs(l_sho[1] - l_elb[1]), abs(l_sho[0] - l_elb[0]))
+        l_rad_ew = math.hypot(abs(l_wri[1] - l_elb[1]), abs(l_wri[0] - l_elb[0]))
+
+        l_opt_elbow = [l_sho[0] + l_rad_es*math.cos(math.radians(90 - optang_es)), l_sho[1] + l_rad_es*math.sin(math.radians(90 - optang_es))]
+        r_opt_elbow = [r_sho[0] + r_rad_es*math.cos(math.radians(90 + optang_es)), r_sho[1] + r_rad_es*math.sin(math.radians(90 + optang_es))]
+
+        l_opt_wrist = [l_elb[0] + l_rad_ew*math.cos(math.radians(90 - optang_ew)), l_elb[1] + l_rad_ew*math.sin(math.radians(90 + optang_ew))]
+        r_opt_wrist = [r_elb[0] + r_rad_ew*math.cos(math.radians(90 + optang_ew)), r_elb[1] + r_rad_ew*math.sin(math.radians(90 + optang_ew))]
+
+        return l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist
+
+
+    def validate(self, pose_ret, optang_es=5, optang_ew=25):
         """Validate the output of segmentation model and pose estimation model
 
         Args:
             pose_ret (int []): array of size 18, containing the pose estimation result
         """
+        max_ang = 10 # Leeway, position is ok +-10 degrees
+        
+        # 1. Check if all keypoints are in frame
+        num_kpts = 0
+        missing = []
+        kpt_names = ["Spine", "Neck", "Head", "Right wrist", "Right elbow", "Right shoulder", "Left shoulder", "Left elbow", "Left wrist"]
 
+        for kp in range(0, 9, 2):
+            # Skip head keypoint
+            if kp == 2:
+                continue
+
+            # Check if keypoint exists, i.e. not zero; else note it down
+            if pose_ret[2*kp] != 0:
+                num_kpts += 1
+            else: 
+                missing.append(kpt_names[kp])
+
+        # Report if the missing keypoints to user
+        if num_kpts != 8:
+            return ErrorState(f"{', '.join(missing)} not in frame.")
+
+
+        # 2. Check if both shoulders are level
+
+        # Find angle of shoulders from horizontal
+        should_x = abs(pose_ret[12] - pose_ret[10])
+        should_y = abs(pose_ret[13] - pose_ret[11])
+        should_ang = math.degrees(math.atan(should_y/should_x))
+
+        # If shoulders misaligned, send feedback for how to adjust
+        if should_ang > max_ang:
+            if(pose_ret[13] > pose_ret[11]):
+                higher, lower = "left shoulder", "right shoulder"
+            else:
+                higher, lower = "right shoulder", "left_shoulder"
+
+            return ErrorState(f"Your {higher} is higher than your {lower} shoulder. Please make sure you are sitting straight.") 
+
+
+        # 3. Check if neck and spine are aligned
+
+        # Get tilt of abdomen (i.e. neck and spine)
+        abdomen_x = abs(pose_ret[2] - pose_ret[0])
+        abdomen_y = abs(pose_ret[3] - pose_ret[1])
+        abdomen_hyp = math.hypot(abdomen_x, abdomen_y)
+        abdomen_ang = math.degrees(math.acos(abdomen_y/abdomen_hyp))
+        
+        # If abdomen is tilted, send error
+        if abdomen_ang > max_ang:
+            return ErrorState("Your neck and your spine are not aligned. Please sit straight.")        
+
+
+        # 4. Check if valid arm positions
+
+        # Get coordinates of left and right wrist, elbow, and shoulder
+        r_wri = [pose_ret[6], pose_ret[7]]
+        r_elb = [pose_ret[8], pose_ret[9]]
+        r_sho = [pose_ret[10], pose_ret[11]]
+
+        l_sho = [pose_ret[12], pose_ret[13]]
+        l_elb = [pose_ret[14], pose_ret[15]]
+        l_wri = [pose_ret[16], pose_ret[17]]
+
+        # Calculate elbow-shoulder angles
+        r_es_x = abs(r_elb[0] - r_sho[0]) # Right arm
+        r_es_y = abs(r_elb[1] - r_sho[1])
+        r_es_ang = math.degrees(math.atan(r_es_x/(r_es_y + 1)))
+
+        l_es_x = abs(l_elb[0] - l_sho[0]) # Left arm
+        l_es_y = abs(l_elb[1] - l_sho[1])
+        l_es_ang = math.degrees(math.atan(l_es_x/(l_es_y + 1)))
+
+        # Calculate elbow wrist angles
+        r_ew_x = abs(l_elb[0] - l_wri[0]) # Right arm
+        r_ew_y = abs(r_elb[1] - r_wri[1])
+        r_ew_ang = math.degrees(math.atan(r_ew_x/(r_ew_y + 1)))
+
+        l_ew_x = abs(l_elb[0] - l_wri[0]) # Left arm
+        l_ew_y = abs(l_elb[1] - l_wri[1])
+        l_ew_ang = math.degrees(math.atan(l_ew_x/(l_ew_y + 1)))
+
+        # Check if all angles are appropriate
+        check = [abs(r_es_ang - optang_es) < max_ang, 
+                 abs(l_es_ang - optang_es) < max_ang, 
+                 abs(r_ew_ang - optang_ew) < max_ang,
+                 abs(l_ew_ang - optang_ew) < max_ang]
+        
+        # If an angle is inappropriate, send back feedback
+        if sum(check) > 0:
+            check_labels = ["right elbow", "left elbow", "right wrist", "left wrist"]
+            misaligned = [check_labels[i] for i, x in enumerate(check) if not x]
+            return ErrorState(f"The following joints are in the wrong position: {', '.join(misaligned)}")
+        
+        return SuccessState()
+    
     def _compare_patches(self, patch1, patch2):
         # Convert patches to a color space better suited for skin color analysis
         patch1_cb = patch1[:, :, 1][patch1[:, :, 1] != 0]
