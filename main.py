@@ -82,6 +82,8 @@ if __name__ == "__main__":
     if first_launch:
         pass
 
+    prev_successful_frame = None
+
     while True:
         # update GUI
         if (

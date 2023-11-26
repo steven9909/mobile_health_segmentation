@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import openvino as ov
 from PIL import Image
+import pyaudio
+import wave
 
 from utils import print_d
 
@@ -67,7 +69,8 @@ class DelegationWorker(Worker):
 
             self.validate(pose_ret)
 
-            seg_image = cv2.imread(seg_ret.value)
+            # seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
+            seg_image = None
 
             self.skin_tone(pose_ret, seg_image, image)
 
@@ -83,6 +86,28 @@ class DelegationWorker(Worker):
             pose_ret (int []): array of size 18, containing the pose estimation result
         """
 
+    def _compare_patches(self, patch1, patch2):
+        # Convert patches to a color space better suited for skin color analysis
+        patch1_cb = patch1[:, :, 1][patch1[:, :, 1] != 0]
+        patch1_cr = patch1[:, :, 2][patch1[:, :, 2] != 0]
+
+        patch2_cb = patch2[:, :, 1][patch2[:, :, 1] != 0]
+        patch2_cr = patch2[:, :, 2][patch2[:, :, 2] != 0]
+
+        # Calculate the mean color values of the patches
+        mean1_1 = np.mean(patch1_cb)
+        mean2_1 = np.mean(patch1_cr)
+
+        mean1_2 = np.mean(patch2_cb)
+        mean2_2 = np.mean(patch2_cr)
+
+        # Calculate the Euclidean distance between the mean values
+        distance = np.linalg.norm(mean2_1 - mean2_2)
+        distance_2 = np.linalg.norm(mean1_1 - mean1_2)
+
+        print(distance)
+        print(distance_2)
+
     def skin_tone(self, pose_ret, seg_image, image, radius=5):
         """Get the skin tone of the person in the image
 
@@ -91,31 +116,26 @@ class DelegationWorker(Worker):
             seg_ret (str): path to the segmentation result
             image (np.ndarray): the image
         """
-
-        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-        lower_skin = np.array([0, 48, 80], dtype=np.uint8)
-        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
-
-        mask_skin = cv2.inRange(hsv_image, lower_skin, upper_skin)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
 
         neck_x, neck_y = pose_ret[2:4]
 
-        mask_spot = np.zeros(image.shape[:2], dtype="uint8")
+        mask_neck = np.zeros(image.shape[:2], dtype="uint8")
 
-        cv2.circle(mask_spot, (neck_x, neck_y - radius), radius, 255, -1)
+        cv2.circle(mask_neck, (neck_x, neck_y - radius), radius, 255, -1)
 
-        mask = cv2.bitwise_and(mask_skin, mask_spot)
+        patch1 = cv2.bitwise_and(image, image, mask=mask_neck)
 
-        mask = cv2.bitwise_and(image, image, mask=mask)
+        mask_arm = np.zeros(image.shape[:2], dtype="uint8")
 
-        predicted_skin_colour_b = np.mean(mask[..., 0])
-        predicted_skin_colour_g = np.mean(mask[..., 1])
-        predicted_skin_colour_r = np.mean(mask[..., 2])
+        r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
+        r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]
 
-        print_d(
-            f"skin colour {predicted_skin_colour_r}, {predicted_skin_colour_g}, {predicted_skin_colour_b}"
-        )
+        cv2.line(mask_arm, (r_elbow_x, r_elbow_y), (r_shoulder_x, r_shoulder_y), 255, 3)
+
+        patch2 = cv2.bitwise_and(image, image, mask=mask_arm)
+
+        self._compare_patches(patch1, patch2)
 
     def scale(self, pose_ret, seg_ret):
         CUFF_LENGTH = 10  # cm
@@ -265,3 +285,43 @@ class PoseEstimatorWorker(ModelWorker):
             if keypoint[0] != -1:
                 pose_ret[2 * (id - 7)] = int(keypoint[0])
                 pose_ret[2 * (id - 7) + 1] = int(keypoint[1])
+
+
+class AudioWorker(Worker):
+    def __init__(self, process_event, done_event, audio_ret):
+        super().__init__((process_event, done_event, audio_ret))
+
+    def run(process_event, done_event, audio_ret):
+        FORMAT = pyaudio.paInt16
+        CHANNELS = 1
+        RATE = 44100
+        CHUNK = 512
+        RECORD_SECONDS = 3
+        WAVE_OUTPUT_FILENAME = "recordedFile.wav"
+        audio = pyaudio.PyAudio()
+
+        stream = audio.open(
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=RATE,
+            input=True,
+            input_device_index=0,
+            frames_per_buffer=CHUNK,
+        )
+        record_frames = []
+
+        while True:
+            for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+                data = stream.read(CHUNK)
+                record_frames.append(data)
+
+            stream.stop_stream()
+            stream.close()
+            audio.terminate()
+
+            waveFile = wave.open(WAVE_OUTPUT_FILENAME, "wb")
+            waveFile.setnchannels(CHANNELS)
+            waveFile.setsampwidth(audio.get_sample_size(FORMAT))
+            waveFile.setframerate(RATE)
+            waveFile.writeframes(b"".join(record_frames))
+            waveFile.close()
