@@ -56,6 +56,7 @@ class DelegationWorker(Worker):
         correct_pose,
         seg_ret,
         error_msg,
+        skin_threshold,
     ):
         super().__init__(
             (
@@ -66,6 +67,7 @@ class DelegationWorker(Worker):
                 correct_pose,
                 seg_ret,
                 error_msg,
+                skin_threshold,
             )
         )
 
@@ -78,6 +80,7 @@ class DelegationWorker(Worker):
         correct_pose,
         seg_ret,
         error_msg,
+        skin_threshold,
     ):
         seg_process_event = mp.Event()
         pose_process_event = mp.Event()
@@ -106,19 +109,23 @@ class DelegationWorker(Worker):
             seg_done_event.clear()
 
             state = self.validate(pose_ret)
-            print(state)
-            if state == ErrorState:
+
+            if isinstance(state, ErrorState):
                 error_msg.value = str(state)
                 done_event.set()
                 continue
             else:
                 error_msg.value = ""
 
-            correct_pose = self.get_overlay(pose_ret)
+            for i, (x, y) in enumerate(self.get_overlay(pose_ret)):
+                correct_pose[2 * i] = x
+                correct_pose[(2 * i) + 1] = y
 
             seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
-            distance = self.skin_tone(pose_ret, seg_image, image)
-            print(distance)
+            if self.skin_tone(pose_ret, seg_image, image) > skin_threshold:
+                error_msg.value = (
+                    "Please make sure you are not wearing any sleeves below the cuff."
+                )
 
             done_event.set()
             print_d("Delegation Done")
@@ -180,9 +187,9 @@ class DelegationWorker(Worker):
             "Left wrist",
         ]
 
-        for kp in range(0, 9, 2):
+        for kp in range(0, 9):
             # Skip head keypoint
-            if kp == 4:
+            if kp * 2 == 4:
                 continue
 
             # Check if keypoint exists, i.e. not zero; else note it down

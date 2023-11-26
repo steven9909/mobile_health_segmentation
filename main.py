@@ -29,6 +29,7 @@ if __name__ == "__main__":
     GUI_UPDATE_INTERVAL = 500  # ms
     REST_DURATION = 5 * 60  # s
     AUDIO_THRESHOLD = 50  # db
+    SKIN_THRESHOLD = 10
     skip_rest = True
 
     save_dir = Path("./saved")
@@ -58,13 +59,20 @@ if __name__ == "__main__":
         l_wrist
     """
     pose_ret = manager.Array("i", [0] * 18)
-    correct_pose = manager.Array("i", [0] * 4)
+    correct_pose = manager.Array("i", [0] * 8)
     seg_ret = manager.Value("c", str(save_dir / "seg.png"))
     audio_ret = manager.Value("i", 0)
     error_msg = manager.Value("c", "")
 
     delegation = DelegationWorker(
-        process_event, done_event, file_str, pose_ret, correct_pose, seg_ret, error_msg
+        process_event,
+        done_event,
+        file_str,
+        pose_ret,
+        correct_pose,
+        seg_ret,
+        error_msg,
+        SKIN_THRESHOLD,
     )
 
     audio = AudioWorker(audio_ret)
@@ -107,6 +115,12 @@ if __name__ == "__main__":
                 cv2.circle(
                     prev_successful_frame, pose_ret[p : p + 2], 2, (0, 255, 0), -1
                 )
+
+            for p in range(0, len(correct_pose), 2):
+                cv2.circle(
+                    prev_successful_frame, correct_pose[p : p + 2], 2, (0, 0, 255), -1
+                )
+
             img = Image.fromarray(prev_successful_frame)
             seg = Image.open(seg_ret.value).convert("L")
 
@@ -138,7 +152,7 @@ if __name__ == "__main__":
         while not done_event.is_set():
             if audio_ret.value > AUDIO_THRESHOLD:
                 audio_label.configure(
-                    text=f"Audio level = {audio_ret.value}. Please do not talk"
+                    text=f"Audio level = {audio_ret.value}. Please do not talk or laugh."
                 )
                 audio_label.configure(fg="red")
             else:
