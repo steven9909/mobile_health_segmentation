@@ -83,7 +83,13 @@ if __name__ == "__main__":
     first_launch = True
 
     if first_launch:
-        pass
+        next_button_photo = ImageTk.PhotoImage(file="./tutorial-illustrations/next-button.jpg")
+        skip_button_photo = ImageTk.PhotoImage(file="./tutorial-illustrations/skip-button.jpg")
+        previous_button_photo = ImageTk.PhotoImage(file="./tutorial-illustrations/previous-button.jpg")
+        step1 = Image.open("./tutorial-illustrations/step1-beforehand.jpg")
+        step2 = Image.open("./tutorial-illustrations/step2-toilet.jpg")
+        step3 = Image.open("./tutorial-illustrations/step3-posture.jpg")
+        tutimgs = [step1, step2, step3]
 
     prev_successful_frame = None
 
@@ -104,8 +110,12 @@ if __name__ == "__main__":
             root.update()
 
         if first_launch and not skip_rest:
-            show_notification("Please rest and sit still for 5 minutes")
-            time.sleep(REST_DURATION)
+            next_button_label = tk.Label(frm, image=next_button_photo, border=0)
+            next_button_label.grid(row = 1, column=1)
+
+            label.configure(image = ImageTk.PhotoImage("step1"))
+            #show_notification("Please rest and sit still for 5 minutes")
+            #time.sleep(REST_DURATION)
             first_launch = False
 
         ret, frame = cap.read()
