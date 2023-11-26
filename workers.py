@@ -343,7 +343,7 @@ class SegmentationModelWorker(ModelWorker):
     def __init__(self, process_event, done_event, file_str, seg_ret):
         super().__init__((process_event, done_event, file_str, seg_ret))
 
-    def keep_largest_island(binary_mask):
+    def _get_largest_island(self, binary_mask):
         _, labels, stats, _ = cv2.connectedComponentsWithStats(
             binary_mask, connectivity=8
         )
@@ -354,10 +354,26 @@ class SegmentationModelWorker(ModelWorker):
 
         max_label = np.argmax(sizes) + 1
 
-        largest_island = np.zeros_like(binary_mask)
+        largest_island = np.zeros_like(binary_mask, dtype=np.uint8)
         largest_island[labels == max_label] = 255
 
         return largest_island
+
+    def _find_minimum_rectangle(self, binary_mask):
+        contours, _ = cv2.findContours(
+            binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        if not contours:
+            return None
+
+        all_points = np.vstack(contours)
+
+        rect = cv2.minAreaRect(all_points)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+
+        return box
 
     def pre_block(self, process_event, done_event, file_str, seg_ret):
         self.device = torch.device("cpu")
@@ -390,24 +406,28 @@ class SegmentationModelWorker(ModelWorker):
         )
         image = torch.unsqueeze(image, 0)
 
-        output = self.model(image)
-        output = (
+        segmented = self.model(image)
+        segmented = (
             np.transpose(
                 np.squeeze(
-                    (torch.sigmoid(output.detach()) > 0.5).float().cpu().numpy(), 0
+                    (torch.sigmoid(segmented.detach()) > 0.3).float().cpu().numpy(), 0
                 ),
                 (1, 2, 0),
             )[:, :, 1]
             * 255
-        )
-        binary_mask = np.random.randint(
-            0, 2, (100, 100), dtype=np.uint8
-        )  # Example binary mask
-        largest_island_mask = keep_largest_island(binary_mask)
+        ).astype(np.uint8)
 
-        out = Image.fromarray(output.astype(np.uint8), mode="L")
-        out.save(seg_ret.value)
-        out.close()
+        largest_island_mask = self._get_largest_island(segmented)
+        rectangle = self._find_minimum_rectangle(largest_island_mask)
+
+        output = np.zeros_like(segmented, dtype=np.uint8)
+
+        if rectangle is not None:
+            output = cv2.drawContours(output, [rectangle], 0, 255, 2)
+
+        output = Image.fromarray(output, mode="L")
+        output.save(seg_ret.value)
+        output.close()
 
 
 class PoseEstimatorWorker(ModelWorker):

@@ -96,17 +96,18 @@ if __name__ == "__main__":
             cur_time = time.time() * 1000.0
             for p in range(0, len(pose_ret), 2):
                 cv2.circle(
-                    prev_successful_frame, pose_ret[p : p + 2], 5, (0, 255, 0), -1
+                    prev_successful_frame, pose_ret[p : p + 2], 2, (0, 255, 0), -1
                 )
             img = Image.fromarray(prev_successful_frame)
+            seg = Image.open(seg_ret.value).convert("L")
+
+            img.paste(seg.convert("RGB"), (0, 0), seg)
+
+            img = img.resize((512, 512), resample=Image.BICUBIC)
+
             imgtk = ImageTk.PhotoImage(image=img)
             label.configure(image=imgtk)
             root.update()
-
-        if first_launch and not skip_rest:
-            show_notification("Please rest and sit still for 5 minutes")
-            time.sleep(REST_DURATION)
-            first_launch = False
 
         ret, frame = cap.read()
 
