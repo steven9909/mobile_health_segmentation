@@ -112,14 +112,14 @@ class DelegationWorker(Worker):
 
             if isinstance(state, ErrorState):
                 error_msg.value = str(state)
+                print_d("Delegation Done with Error")
                 done_event.set()
                 continue
             else:
                 error_msg.value = ""
-
             for i, (x, y) in enumerate(self.get_overlay(pose_ret)):
-                correct_pose[2 * i] = x
-                correct_pose[(2 * i) + 1] = y
+                correct_pose[2 * i] = int(x)
+                correct_pose[(2 * i) + 1] = int(y)
 
             seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
             if self.skin_tone(pose_ret, seg_image, image) > skin_threshold:
@@ -127,8 +127,8 @@ class DelegationWorker(Worker):
                     "Please make sure you are not wearing any sleeves below the cuff."
                 )
 
-            done_event.set()
             print_d("Delegation Done")
+            done_event.set()
 
     def get_overlay(self, pose_ret, optang_es=5, optang_ew=25):
         r_wri = [pose_ret[6], pose_ret[7]]
@@ -144,25 +144,25 @@ class DelegationWorker(Worker):
         l_rad_es = math.hypot(abs(l_sho[1] - l_elb[1]), abs(l_sho[0] - l_elb[0]))
         l_rad_ew = math.hypot(abs(l_wri[1] - l_elb[1]), abs(l_wri[0] - l_elb[0]))
 
-        l_opt_elbow = [
+        l_opt_elbow = (
             l_sho[0] + l_rad_es * math.cos(math.radians(90 - optang_es)),
             l_sho[1] + l_rad_es * math.sin(math.radians(90 - optang_es)),
-        ]
-        r_opt_elbow = [
+        )
+        r_opt_elbow = (
             r_sho[0] + r_rad_es * math.cos(math.radians(90 + optang_es)),
             r_sho[1] + r_rad_es * math.sin(math.radians(90 + optang_es)),
-        ]
+        )
 
-        l_opt_wrist = [
+        l_opt_wrist = (
             l_elb[0] + l_rad_ew * math.cos(math.radians(90 - optang_ew)),
             l_elb[1] + l_rad_ew * math.sin(math.radians(90 + optang_ew)),
-        ]
-        r_opt_wrist = [
+        )
+        r_opt_wrist = (
             r_elb[0] + r_rad_ew * math.cos(math.radians(90 + optang_ew)),
             r_elb[1] + r_rad_ew * math.sin(math.radians(90 + optang_ew)),
-        ]
+        )
 
-        return l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist
+        return [l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist]
 
     def validate(self, pose_ret, optang_es=5, optang_ew=25):
         """Validate the output of segmentation model and pose estimation model
@@ -272,7 +272,7 @@ class DelegationWorker(Worker):
         ]
 
         # If an angle is inappropriate, send back feedback
-        if sum(check) > 0:
+        if sum(check) < 4:
             check_labels = ["right elbow", "left elbow", "right wrist", "left wrist"]
             misaligned = [check_labels[i] for i, x in enumerate(check) if not x]
             return ErrorState(
@@ -332,21 +332,9 @@ class DelegationWorker(Worker):
 
         return self._compare_patches(patch1, patch2)
 
-    def scale(self, pose_ret, seg_ret):
+    def scale(self, pose_ret, seg_image, rect):
         CUFF_LENGTH = 10  # cm
-        seg_result = Image.open(seg_ret.value).convert("L")
 
-        """
-            spine
-            neck
-            head
-            r_wrist
-            r_elbow
-            r_shoulder
-            l_shoulder
-            l_elbow
-            l_wrist
-        """
         r_wrist_x, r_wrist_y = pose_ret[6], pose_ret[7]
         r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
         r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]

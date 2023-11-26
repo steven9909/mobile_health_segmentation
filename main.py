@@ -26,7 +26,7 @@ if __name__ == "__main__":
     frame_width = 1440
     frame_height = 960
 
-    GUI_UPDATE_INTERVAL = 500  # ms
+    GUI_UPDATE_INTERVAL = 1  # ms
     REST_DURATION = 5 * 60  # s
     AUDIO_THRESHOLD = 50  # db
     SKIN_THRESHOLD = 10
@@ -163,10 +163,9 @@ if __name__ == "__main__":
         if error_msg.value != "":
             error_label.configure(text=error_msg.value)
             error_label.configure(fg="red")
-            done_event.clear()
-            continue
         else:
             error_label.configure(text="")
             error_label.configure(fg="SystemButtonFace")
 
+        root.update()
         done_event.clear()
