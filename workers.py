@@ -1,20 +1,16 @@
+import audioop
+import math
 import multiprocessing as mp
 
 import cv2
 import numpy as np
 import openvino as ov
-from PIL import Image
 import pyaudio
-import wave
-import audioop
-import time
-
-from utils import print_d
-
 import torch
+from PIL import Image
 from torchvision.transforms.functional import normalize
 
-import math
+from utils import print_d
 
 
 class ErrorState:
@@ -87,8 +83,10 @@ class DelegationWorker(Worker):
         seg_done_event = mp.Event()
         pose_done_event = mp.Event()
 
+        seg_bounding = mp.Array("i", [0] * 8)
+
         _ = SegmentationModelWorker(
-            seg_process_event, seg_done_event, file_str, seg_ret
+            seg_process_event, seg_done_event, file_str, seg_ret, seg_bounding
         )
         _ = PoseEstimatorWorker(pose_process_event, pose_done_event, file_str, pose_ret)
 
@@ -121,11 +119,16 @@ class DelegationWorker(Worker):
                 correct_pose[2 * i] = int(x)
                 correct_pose[(2 * i) + 1] = int(y)
 
-            seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
-            if self.skin_tone(pose_ret, seg_image, image) > skin_threshold:
+            if self.skin_tone(pose_ret, image) > skin_threshold:
                 error_msg.value = (
                     "Please make sure you are not wearing any sleeves below the cuff."
                 )
+                print_d("Delegation Done with Error")
+                done_event.set()
+                continue
+
+            seg_image = cv2.imread(seg_ret.value)
+            scale = self.scale(pose_ret, seg_image, seg_bounding)
 
             print_d("Delegation Done")
             done_event.set()
@@ -303,7 +306,7 @@ class DelegationWorker(Worker):
 
         return distance
 
-    def skin_tone(self, pose_ret, seg_image, image, radius=5):
+    def skin_tone(self, pose_ret, image, radius=5):
         """Get the skin tone of the person in the image
 
         Args:
@@ -332,7 +335,7 @@ class DelegationWorker(Worker):
 
         return self._compare_patches(patch1, patch2)
 
-    def scale(self, pose_ret, seg_image, rect):
+    def scale(self, pose_ret, seg_image, seg_bounding):
         CUFF_LENGTH = 10  # cm
 
         r_wrist_x, r_wrist_y = pose_ret[6], pose_ret[7]
@@ -371,8 +374,8 @@ class ModelWorker(Worker):
 
 
 class SegmentationModelWorker(ModelWorker):
-    def __init__(self, process_event, done_event, file_str, seg_ret):
-        super().__init__((process_event, done_event, file_str, seg_ret))
+    def __init__(self, process_event, done_event, file_str, seg_ret, seg_bounding):
+        super().__init__((process_event, done_event, file_str, seg_ret, seg_bounding))
 
     def _get_largest_island(self, binary_mask):
         _, labels, stats, _ = cv2.connectedComponentsWithStats(
@@ -406,7 +409,7 @@ class SegmentationModelWorker(ModelWorker):
 
         return box
 
-    def pre_block(self, process_event, done_event, file_str, seg_ret):
+    def pre_block(self, process_event, done_event, file_str, seg_ret, seg_bounding):
         self.device = torch.device("cpu")
         self.model = torch.hub.load(
             "milesial/Pytorch-UNet",
@@ -423,7 +426,7 @@ class SegmentationModelWorker(ModelWorker):
         self.model = self.model.to(self.device)
         self.model.eval()
 
-    def block(self, process_event, done_event, file_str, seg_ret):
+    def block(self, process_event, done_event, file_str, seg_ret, seg_bounding):
         r_image = Image.open(file_str.value).convert("RGB")
 
         image = np.asarray(r_image, dtype=np.float32) / 255
@@ -454,6 +457,11 @@ class SegmentationModelWorker(ModelWorker):
         output = np.zeros_like(segmented, dtype=np.uint8)
 
         if rectangle is not None:
+            for i in range(4):
+                x = rectangle[i][0]
+                y = rectangle[i][1]
+                seg_bounding[2 * i] = x
+                seg_bounding[2 * i + 1] = y
             output = cv2.drawContours(output, [rectangle], 0, 255, 2)
 
         output = Image.fromarray(output, mode="L")

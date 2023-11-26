@@ -1,17 +1,14 @@
-from tkinter import messagebox, Tk, ttk
-import tkinter as tk
-
 import multiprocessing as mp
+import time
+import tkinter as tk
 from pathlib import Path
+from tkinter import Tk, messagebox, ttk
 
 import cv2
-
-from workers import DelegationWorker, AudioWorker
-import time
+from PIL import Image, ImageTk
 
 from utils import check_focus, print_d
-
-from PIL import Image, ImageTk
+from workers import AudioWorker, DelegationWorker
 
 
 def show_error_box(error_msg):
