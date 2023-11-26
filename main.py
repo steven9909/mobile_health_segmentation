@@ -6,7 +6,7 @@ from pathlib import Path
 
 import cv2
 
-from workers import DelegationWorker
+from workers import DelegationWorker, AudioWorker
 import time
 
 from utils import check_focus, print_d
@@ -58,10 +58,13 @@ if __name__ == "__main__":
     """
     pose_ret = manager.Array("i", [0] * 18)
     seg_ret = manager.Value("c", str(save_dir / "seg.png"))
+    audio_ret = manager.Value("i", 0)
 
     delegation = DelegationWorker(
         process_event, done_event, file_str, pose_ret, seg_ret
     )
+
+    audio = AudioWorker(audio_ret)
 
     print_d("Starting main loop")
 
@@ -91,14 +94,10 @@ if __name__ == "__main__":
             and prev_successful_frame is not None
         ):
             cur_time = time.time() * 1000.0
-            prev_successful_frame = cv2.flip(prev_successful_frame, 1)
             for p in range(0, len(pose_ret), 2):
                 cv2.circle(
                     prev_successful_frame, pose_ret[p : p + 2], 5, (0, 255, 0), -1
                 )
-            prev_successful_frame = cv2.cvtColor(
-                prev_successful_frame, cv2.COLOR_BGR2RGBA
-            )
             img = Image.fromarray(prev_successful_frame)
             imgtk = ImageTk.PhotoImage(image=img)
             label.configure(image=imgtk)
@@ -117,15 +116,20 @@ if __name__ == "__main__":
             continue
         else:
             notify_label.configure(text="")
-            root.update()
 
         frame = cv2.resize(
             frame, (patch_size, patch_size), interpolation=cv2.INTER_CUBIC
         )
-        prev_successful_frame = frame
+
+        prev_successful_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
         cv2.imwrite(str(save_dir / "frame.jpg"), frame)
         process_event.set()  # we are ready to pass off the image to the Delegation worker
-        done_event.wait()  # wait for the delegation worker to finish
+
+        while not done_event.is_set():
+            if audio_ret.value == 1:
+                notify_label.configure(text="Please avoid loud noises and do not talk")
+                root.update()
+
         done_event.clear()  # clear the flag
 
         # pose_ret contains the pose information

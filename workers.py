@@ -6,6 +6,8 @@ import openvino as ov
 from PIL import Image
 import pyaudio
 import wave
+import audioop
+import time
 
 from utils import print_d
 
@@ -74,10 +76,8 @@ class DelegationWorker(Worker):
             pose_done_event.wait()
             pose_done_event.clear()
 
-            self.validate(pose_ret)
-
-            # seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
-            seg_image = None
+            # self.validate(pose_ret)
+            seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
 
             self.skin_tone(pose_ret, seg_image, image)
 
@@ -145,7 +145,7 @@ class DelegationWorker(Worker):
 
         for kp in range(0, 9, 2):
             # Skip head keypoint
-            if kp == 2:
+            if kp == 4:
                 continue
 
             # Check if keypoint exists, i.e. not zero; else note it down
@@ -238,26 +238,27 @@ class DelegationWorker(Worker):
         return SuccessState()
 
     def _compare_patches(self, patch1, patch2):
-        # Convert patches to a color space better suited for skin color analysis
         patch1_cb = patch1[:, :, 1][patch1[:, :, 1] != 0]
         patch1_cr = patch1[:, :, 2][patch1[:, :, 2] != 0]
 
         patch2_cb = patch2[:, :, 1][patch2[:, :, 1] != 0]
         patch2_cr = patch2[:, :, 2][patch2[:, :, 2] != 0]
 
-        # Calculate the mean color values of the patches
-        mean1_1 = np.mean(patch1_cb)
-        mean2_1 = np.mean(patch1_cr)
+        mean1_cb, std1_cb = np.mean(patch1_cb), np.std(patch1_cb)
+        mean1_cr, std1_cr = np.mean(patch1_cr), np.std(patch1_cr)
 
-        mean1_2 = np.mean(patch2_cb)
-        mean2_2 = np.mean(patch2_cr)
+        mean2_cb, std2_cb = np.mean(patch2_cb), np.std(patch2_cb)
+        mean2_cr, std2_cr = np.mean(patch2_cr), np.std(patch2_cr)
 
-        # Calculate the Euclidean distance between the mean values
-        distance = np.linalg.norm(mean2_1 - mean2_2)
-        distance_2 = np.linalg.norm(mean1_1 - mean1_2)
-
+        distance = np.sqrt(
+            (mean1_cb - mean2_cb) ** 2
+            + (mean1_cr - mean2_cr) ** 2
+            + (std1_cb - std2_cb) ** 2
+            + (std1_cr - std2_cr) ** 2
+        )
         print(distance)
-        print(distance_2)
+
+        return distance
 
     def skin_tone(self, pose_ret, seg_image, image, radius=5):
         """Get the skin tone of the person in the image
@@ -342,6 +343,22 @@ class SegmentationModelWorker(ModelWorker):
     def __init__(self, process_event, done_event, file_str, seg_ret):
         super().__init__((process_event, done_event, file_str, seg_ret))
 
+    def keep_largest_island(binary_mask):
+        _, labels, stats, _ = cv2.connectedComponentsWithStats(
+            binary_mask, connectivity=8
+        )
+
+        sizes = stats[1:, -1]
+        if len(sizes) == 0:
+            return np.zeros_like(binary_mask)
+
+        max_label = np.argmax(sizes) + 1
+
+        largest_island = np.zeros_like(binary_mask)
+        largest_island[labels == max_label] = 255
+
+        return largest_island
+
     def pre_block(self, process_event, done_event, file_str, seg_ret):
         self.device = torch.device("cpu")
         self.model = torch.hub.load(
@@ -374,12 +391,21 @@ class SegmentationModelWorker(ModelWorker):
         image = torch.unsqueeze(image, 0)
 
         output = self.model(image)
+        output = (
+            np.transpose(
+                np.squeeze(
+                    (torch.sigmoid(output.detach()) > 0.5).float().cpu().numpy(), 0
+                ),
+                (1, 2, 0),
+            )[:, :, 1]
+            * 255
+        )
+        binary_mask = np.random.randint(
+            0, 2, (100, 100), dtype=np.uint8
+        )  # Example binary mask
+        largest_island_mask = keep_largest_island(binary_mask)
 
-        output = np.transpose(
-            np.squeeze(torch.sigmoid(output.detach()).cpu().numpy(), 0), (1, 2, 0)
-        )[:, :, 1]
-
-        out = Image.fromarray(output, mode="L")
+        out = Image.fromarray(output.astype(np.uint8), mode="L")
         out.save(seg_ret.value)
         out.close()
 
@@ -439,16 +465,20 @@ class PoseEstimatorWorker(ModelWorker):
 
 
 class AudioWorker(Worker):
-    def __init__(self, process_event, done_event, audio_ret):
-        super().__init__((process_event, done_event, audio_ret))
+    def __init__(self, audio_ret):
+        super().__init__([audio_ret])
 
-    def run(process_event, done_event, audio_ret):
+    def _is_loud_noise(self, data, threshold):
+        rms = audioop.rms(data, 2)
+        decibels = 20 * math.log10(rms) if rms > 0 else 0
+        return decibels > threshold
+
+    def run(self, audio_ret):
         FORMAT = pyaudio.paInt16
         CHANNELS = 1
         RATE = 44100
-        CHUNK = 512
-        RECORD_SECONDS = 3
-        WAVE_OUTPUT_FILENAME = "recordedFile.wav"
+        CHUNK = 1024
+        THRESHOLD = 5  # dB
         audio = pyaudio.PyAudio()
 
         stream = audio.open(
@@ -456,23 +486,12 @@ class AudioWorker(Worker):
             channels=CHANNELS,
             rate=RATE,
             input=True,
-            input_device_index=0,
             frames_per_buffer=CHUNK,
         )
-        record_frames = []
 
         while True:
-            for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
-                data = stream.read(CHUNK)
-                record_frames.append(data)
-
-            stream.stop_stream()
-            stream.close()
-            audio.terminate()
-
-            waveFile = wave.open(WAVE_OUTPUT_FILENAME, "wb")
-            waveFile.setnchannels(CHANNELS)
-            waveFile.setsampwidth(audio.get_sample_size(FORMAT))
-            waveFile.setframerate(RATE)
-            waveFile.writeframes(b"".join(record_frames))
-            waveFile.close()
+            data = stream.read(CHUNK)
+            if self._is_loud_noise(data, THRESHOLD):
+                audio_ret.value = 1
+            else:
+                audio_ret.value = 0
