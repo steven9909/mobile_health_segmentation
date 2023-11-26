@@ -29,7 +29,7 @@ if __name__ == "__main__":
     GUI_UPDATE_INTERVAL = 1  # ms
     REST_DURATION = 5 * 60  # s
     AUDIO_THRESHOLD = 50  # db
-    SKIN_THRESHOLD = 10
+    SKIN_THRESHOLD = 15
     skip_rest = True
 
     save_dir = Path("./saved")
@@ -113,12 +113,12 @@ if __name__ == "__main__":
             cur_time = time.time() * 1000.0
             for p in range(0, len(pose_ret), 2):
                 cv2.circle(
-                    prev_successful_frame, pose_ret[p : p + 2], 2, (0, 255, 0), -1
+                    prev_successful_frame, pose_ret[p : p + 2], 2, (0, 255, 0), 2
                 )
 
             for p in range(0, len(correct_pose), 2):
                 cv2.circle(
-                    prev_successful_frame, correct_pose[p : p + 2], 2, (0, 0, 255), -1
+                    prev_successful_frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1
                 )
 
             img = Image.fromarray(prev_successful_frame)
@@ -145,7 +145,7 @@ if __name__ == "__main__":
             frame, (patch_size, patch_size), interpolation=cv2.INTER_CUBIC
         )
 
-        prev_successful_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        prev_successful_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         cv2.imwrite(str(save_dir / "frame.jpg"), frame)
         process_event.set()  # we are ready to pass off the image to the Delegation worker
 
