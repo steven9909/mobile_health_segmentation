@@ -72,6 +72,140 @@ if __name__ == "__main__":
     print_d("Starting main loop")
 
     root = Tk()
+
+    cap = cv2.VideoCapture(0)
+
+    cur_time = time.time() * 1000.0
+  
+    first_launch = True
+    endtut = False
+    if first_launch:
+
+        canvas = tk.Canvas(root, width=1194, height=832)
+        canvas.pack()
+
+        # tutorial steps
+        step1 = Image.open("./tutorial-illustrations/step1-beforehand.jpg")
+        step1 = step1.resize((1194, 832))
+        step1 = ImageTk.PhotoImage(image=step1)
+
+        step2 = Image.open("./tutorial-illustrations/step2-toilet.jpg")
+        step2 = step2.resize((1194, 832))
+        step2 = ImageTk.PhotoImage(image=step2)
+
+        step3 = Image.open("./tutorial-illustrations/step3-posture.jpg")
+        step3 = step3.resize((1194, 832))
+        step3 = ImageTk.PhotoImage(image=step3)
+
+        step4 = Image.open("./tutorial-illustrations/step4-cuffposition.jpg")
+        step4 = step4.resize((1194, 832))
+        step4 = ImageTk.PhotoImage(image=step4)
+
+        tutimgs = [step1, step2, step3, step4]
+        maxind = len(tutimgs)
+        curr_ind = 0
+
+        def end_tut():
+            print("skip tut")
+            global endtut
+            endtut = True
+
+        # Buttons
+        skip_button_photo = Image.open("./tutorial-illustrations/skip-button.jpg")
+        skip_button_photo = skip_button_photo.resize((140, 61))
+        skip_button_photo = ImageTk.PhotoImage(image=skip_button_photo)
+
+        skip_button_label = tk.Label(canvas, image=skip_button_photo, border=0)
+        skip_button_label.bind("<Button>", lambda e:end_tut())
+
+        def next_slide():
+            global curr_ind
+            global prev_button_window
+            global next_button_label
+
+            if curr_ind == 0:
+                prev_button_label.configure(image=prev_button_photo)
+            if curr_ind < maxind - 1:
+                curr_ind += 1
+            canvas.create_image(597, 416, image=tutimgs[curr_ind])
+            if curr_ind == maxind - 1:
+                next_button_label.configure(image=done_button_photo)
+                next_button_label.bind("<Button>", lambda e:end_tut())
+            root.update()
+
+        next_button_photo = Image.open("./tutorial-illustrations/next-button.jpg")
+        next_button_photo = next_button_photo.resize((140, 61))
+        next_button_photo = ImageTk.PhotoImage(image=next_button_photo)
+
+        next_button_label = tk.Label(canvas, image=next_button_photo, border=0)
+        next_button_label.bind("<Button>", lambda e:next_slide())
+
+        def prev_slide():
+            global curr_ind
+            global prev_button_label
+            global next_button_label
+
+            if curr_ind > 0:
+                if curr_ind == 1:
+                    prev_button_label.configure(image=noprev_button_photo)
+
+                if curr_ind == maxind - 1:
+                    next_button_label.configure(image=next_button_photo)
+                    next_button_label.bind("<Button>", lambda e:next_slide())
+
+                curr_ind -= 1
+                canvas.create_image(597, 416, image=tutimgs[curr_ind])
+            root.update()
+
+        noprev_button_photo = Image.open("./tutorial-illustrations/no-previous-button.jpg")
+        noprev_button_photo = noprev_button_photo.resize((140, 61))
+        noprev_button_photo = ImageTk.PhotoImage(image=noprev_button_photo)
+
+        prev_button_photo = Image.open("./tutorial-illustrations/previous-button.jpg")
+        prev_button_photo = prev_button_photo.resize((140, 61))
+        prev_button_photo = ImageTk.PhotoImage(image=prev_button_photo)
+
+        prev_button_label = tk.Label(canvas, image=noprev_button_photo, border=0)
+        prev_button_label.bind("<Button>", lambda e:prev_slide())
+
+        done_button_photo = Image.open("./tutorial-illustrations/done-button.jpg")
+        done_button_photo = done_button_photo.resize((140, 61))
+        done_button_photo = ImageTk.PhotoImage(image=done_button_photo)
+
+        skip_button_window = canvas.create_window(180, 800, anchor='se', window=skip_button_label)
+        next_button_window = canvas.create_window(1014, 32, anchor='nw', window=next_button_label)
+        prev_button_window = canvas.create_window(180, 32, anchor='ne', window=prev_button_label)
+
+        canvas.create_image(597, 416, image=step1)
+
+        while not endtut:
+            root.update()
+    
+
+        '''
+        start_time = time.time()
+        current_time = time.time()
+        while (start_time - time.time() < REST_DURATION) and not skipwait:
+            label.configure(image=step1)
+            root.update()
+            if time.time() - current_time < 10:
+                continue
+            current_time = time.time()
+            label.configure(image=step2)
+            root.update()
+            if time.time() - current_time < 10:
+                continue
+            current_time = time.time()
+            label.configure(image=step3)
+            root.update()
+            if time.time() - current_time < 10:
+                continue
+        '''
+            
+        first_launch = False
+
+    canvas.destroy()
+   
     frm = ttk.Frame(root, width=256, height=256)
     frm.grid(row=0, column=0, padx=10, pady=2)
 
@@ -84,21 +218,6 @@ if __name__ == "__main__":
     error_label.grid(row=2, column=0)
     audio_label = tk.Label(frm)
     audio_label.grid(row=3, column=0)
-
-    cap = cv2.VideoCapture(0)
-
-    cur_time = time.time() * 1000.0
-
-    first_launch = True
-
-    if first_launch:
-        next_button_photo = ImageTk.PhotoImage(file="./tutorial-illustrations/next-button.jpg")
-        skip_button_photo = ImageTk.PhotoImage(file="./tutorial-illustrations/skip-button.jpg")
-        previous_button_photo = ImageTk.PhotoImage(file="./tutorial-illustrations/previous-button.jpg")
-        step1 = Image.open("./tutorial-illustrations/step1-beforehand.jpg")
-        step2 = Image.open("./tutorial-illustrations/step2-toilet.jpg")
-        step3 = Image.open("./tutorial-illustrations/step3-posture.jpg")
-        tutimgs = [step1, step2, step3]
 
     prev_successful_frame = None
 
@@ -123,15 +242,6 @@ if __name__ == "__main__":
             imgtk = ImageTk.PhotoImage(image=img)
             label.configure(image=imgtk)
             root.update()
-
-        if first_launch and not skip_rest:
-            next_button_label = tk.Label(frm, image=next_button_photo, border=0)
-            next_button_label.grid(row = 1, column=1)
-
-            label.configure(image = ImageTk.PhotoImage("step1"))
-            #show_notification("Please rest and sit still for 5 minutes")
-            #time.sleep(REST_DURATION)
-            first_launch = False
 
         ret, frame = cap.read()
 
