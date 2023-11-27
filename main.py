@@ -1,17 +1,14 @@
-from tkinter import messagebox, Tk, ttk
-import tkinter as tk
-
 import multiprocessing as mp
+import time
+import tkinter as tk
 from pathlib import Path
+from tkinter import Tk, messagebox, ttk
 
 import cv2
-
-from workers import DelegationWorker, AudioWorker
-import time
+from PIL import Image, ImageTk
 
 from utils import check_focus, print_d
-
-from PIL import Image, ImageTk
+from workers import AudioWorker, DelegationWorker
 
 
 def show_error_box(error_msg):
@@ -26,9 +23,10 @@ if __name__ == "__main__":
     frame_width = 1440
     frame_height = 960
 
-    GUI_UPDATE_INTERVAL = 500  # ms
+    GUI_UPDATE_INTERVAL = 1  # ms
     REST_DURATION = 5 * 60  # s
     AUDIO_THRESHOLD = 50  # db
+    SKIN_THRESHOLD = 15
     skip_rest = True
 
     save_dir = Path("./saved")
@@ -58,13 +56,20 @@ if __name__ == "__main__":
         l_wrist
     """
     pose_ret = manager.Array("i", [0] * 18)
-    correct_pose = manager.Array("i", [0] * 4)
+    correct_pose = manager.Array("i", [0] * 8)
     seg_ret = manager.Value("c", str(save_dir / "seg.png"))
     audio_ret = manager.Value("i", 0)
     error_msg = manager.Value("c", "")
 
     delegation = DelegationWorker(
-        process_event, done_event, file_str, pose_ret, correct_pose, seg_ret, error_msg
+        process_event,
+        done_event,
+        file_str,
+        pose_ret,
+        correct_pose,
+        seg_ret,
+        error_msg,
+        SKIN_THRESHOLD,
     )
 
     audio = AudioWorker(audio_ret)
@@ -230,8 +235,14 @@ if __name__ == "__main__":
             cur_time = time.time() * 1000.0
             for p in range(0, len(pose_ret), 2):
                 cv2.circle(
-                    prev_successful_frame, pose_ret[p : p + 2], 2, (0, 255, 0), -1
+                    prev_successful_frame, pose_ret[p : p + 2], 2, (0, 255, 0), 2
                 )
+
+            for p in range(0, len(correct_pose), 2):
+                cv2.circle(
+                    prev_successful_frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1
+                )
+
             img = Image.fromarray(prev_successful_frame)
             seg = Image.open(seg_ret.value).convert("L")
 
@@ -256,14 +267,14 @@ if __name__ == "__main__":
             frame, (patch_size, patch_size), interpolation=cv2.INTER_CUBIC
         )
 
-        prev_successful_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        prev_successful_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         cv2.imwrite(str(save_dir / "frame.jpg"), frame)
         process_event.set()  # we are ready to pass off the image to the Delegation worker
 
         while not done_event.is_set():
             if audio_ret.value > AUDIO_THRESHOLD:
                 audio_label.configure(
-                    text=f"Audio level = {audio_ret.value}. Please do not talk"
+                    text=f"Audio level = {audio_ret.value}. Please do not talk or laugh."
                 )
                 audio_label.configure(fg="red")
             else:
@@ -274,10 +285,9 @@ if __name__ == "__main__":
         if error_msg.value != "":
             error_label.configure(text=error_msg.value)
             error_label.configure(fg="red")
-            done_event.clear()
-            continue
         else:
             error_label.configure(text="")
             error_label.configure(fg="SystemButtonFace")
 
+        root.update()
         done_event.clear()

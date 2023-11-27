@@ -1,20 +1,16 @@
+import audioop
+import math
 import multiprocessing as mp
 
 import cv2
 import numpy as np
 import openvino as ov
-from PIL import Image
 import pyaudio
-import wave
-import audioop
-import time
-
-from utils import print_d
-
 import torch
+from PIL import Image
 from torchvision.transforms.functional import normalize
 
-import math
+from utils import print_d
 
 
 class ErrorState:
@@ -56,6 +52,7 @@ class DelegationWorker(Worker):
         correct_pose,
         seg_ret,
         error_msg,
+        skin_threshold,
     ):
         super().__init__(
             (
@@ -66,6 +63,7 @@ class DelegationWorker(Worker):
                 correct_pose,
                 seg_ret,
                 error_msg,
+                skin_threshold,
             )
         )
 
@@ -78,14 +76,17 @@ class DelegationWorker(Worker):
         correct_pose,
         seg_ret,
         error_msg,
+        skin_threshold,
     ):
         seg_process_event = mp.Event()
         pose_process_event = mp.Event()
         seg_done_event = mp.Event()
         pose_done_event = mp.Event()
 
+        seg_bounding = mp.Array("i", [0] * 8)
+
         _ = SegmentationModelWorker(
-            seg_process_event, seg_done_event, file_str, seg_ret
+            seg_process_event, seg_done_event, file_str, seg_ret, seg_bounding
         )
         _ = PoseEstimatorWorker(pose_process_event, pose_done_event, file_str, pose_ret)
 
@@ -106,22 +107,31 @@ class DelegationWorker(Worker):
             seg_done_event.clear()
 
             state = self.validate(pose_ret)
-            print(state)
-            if state == ErrorState:
+
+            if isinstance(state, ErrorState):
                 error_msg.value = str(state)
+                print_d("Delegation Done with Error")
                 done_event.set()
                 continue
             else:
                 error_msg.value = ""
+            for i, (x, y) in enumerate(self.get_overlay(pose_ret)):
+                correct_pose[2 * i] = int(x)
+                correct_pose[(2 * i) + 1] = int(y)
 
-            correct_pose = self.get_overlay(pose_ret)
+            if self.skin_tone(pose_ret, image) > skin_threshold:
+                error_msg.value = (
+                    "Please make sure you are not wearing any sleeves below the cuff."
+                )
+                print_d("Delegation Done with Error")
+                done_event.set()
+                continue
 
-            seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
-            distance = self.skin_tone(pose_ret, seg_image, image)
-            print(distance)
+            seg_image = cv2.imread(seg_ret.value)
+            scale = self.scale(pose_ret, seg_image, seg_bounding)
 
-            done_event.set()
             print_d("Delegation Done")
+            done_event.set()
 
     def get_overlay(self, pose_ret, optang_es=5, optang_ew=25):
         r_wri = [pose_ret[6], pose_ret[7]]
@@ -137,25 +147,25 @@ class DelegationWorker(Worker):
         l_rad_es = math.hypot(abs(l_sho[1] - l_elb[1]), abs(l_sho[0] - l_elb[0]))
         l_rad_ew = math.hypot(abs(l_wri[1] - l_elb[1]), abs(l_wri[0] - l_elb[0]))
 
-        l_opt_elbow = [
+        l_opt_elbow = (
             l_sho[0] + l_rad_es * math.cos(math.radians(90 - optang_es)),
             l_sho[1] + l_rad_es * math.sin(math.radians(90 - optang_es)),
-        ]
-        r_opt_elbow = [
+        )
+        r_opt_elbow = (
             r_sho[0] + r_rad_es * math.cos(math.radians(90 + optang_es)),
             r_sho[1] + r_rad_es * math.sin(math.radians(90 + optang_es)),
-        ]
+        )
 
-        l_opt_wrist = [
+        l_opt_wrist = (
             l_elb[0] + l_rad_ew * math.cos(math.radians(90 - optang_ew)),
             l_elb[1] + l_rad_ew * math.sin(math.radians(90 + optang_ew)),
-        ]
-        r_opt_wrist = [
+        )
+        r_opt_wrist = (
             r_elb[0] + r_rad_ew * math.cos(math.radians(90 + optang_ew)),
             r_elb[1] + r_rad_ew * math.sin(math.radians(90 + optang_ew)),
-        ]
+        )
 
-        return l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist
+        return [l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist]
 
     def validate(self, pose_ret, optang_es=5, optang_ew=25):
         """Validate the output of segmentation model and pose estimation model
@@ -180,9 +190,9 @@ class DelegationWorker(Worker):
             "Left wrist",
         ]
 
-        for kp in range(0, 9, 2):
+        for kp in range(0, 9):
             # Skip head keypoint
-            if kp == 4:
+            if kp * 2 == 4:
                 continue
 
             # Check if keypoint exists, i.e. not zero; else note it down
@@ -205,12 +215,12 @@ class DelegationWorker(Worker):
         # If shoulders misaligned, send feedback for how to adjust
         if should_ang > max_ang:
             if pose_ret[13] > pose_ret[11]:
-                higher, lower = "left shoulder", "right shoulder"
+                higher, lower = "right shoulder", "left shoulder"
             else:
-                higher, lower = "right shoulder", "left_shoulder"
+                higher, lower = "left shoulder", "right shoulder"
 
             return ErrorState(
-                f"Your {higher} is higher than your {lower} shoulder. Please make sure you are sitting straight."
+                f"Your {higher} is higher than your {lower}. Please make sure they are level."
             )
 
         # 3. Check if neck and spine are aligned
@@ -265,7 +275,7 @@ class DelegationWorker(Worker):
         ]
 
         # If an angle is inappropriate, send back feedback
-        if sum(check) > 0:
+        if sum(check) < 4:
             check_labels = ["right elbow", "left elbow", "right wrist", "left wrist"]
             misaligned = [check_labels[i] for i, x in enumerate(check) if not x]
             return ErrorState(
@@ -296,7 +306,7 @@ class DelegationWorker(Worker):
 
         return distance
 
-    def skin_tone(self, pose_ret, seg_image, image, radius=5):
+    def skin_tone(self, pose_ret, image, radius=5):
         """Get the skin tone of the person in the image
 
         Args:
@@ -325,21 +335,9 @@ class DelegationWorker(Worker):
 
         return self._compare_patches(patch1, patch2)
 
-    def scale(self, pose_ret, seg_ret):
+    def scale(self, pose_ret, seg_image, seg_bounding):
         CUFF_LENGTH = 10  # cm
-        seg_result = Image.open(seg_ret.value).convert("L")
 
-        """
-            spine
-            neck
-            head
-            r_wrist
-            r_elbow
-            r_shoulder
-            l_shoulder
-            l_elbow
-            l_wrist
-        """
         r_wrist_x, r_wrist_y = pose_ret[6], pose_ret[7]
         r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
         r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]
@@ -376,8 +374,8 @@ class ModelWorker(Worker):
 
 
 class SegmentationModelWorker(ModelWorker):
-    def __init__(self, process_event, done_event, file_str, seg_ret):
-        super().__init__((process_event, done_event, file_str, seg_ret))
+    def __init__(self, process_event, done_event, file_str, seg_ret, seg_bounding):
+        super().__init__((process_event, done_event, file_str, seg_ret, seg_bounding))
 
     def _get_largest_island(self, binary_mask):
         _, labels, stats, _ = cv2.connectedComponentsWithStats(
@@ -411,7 +409,7 @@ class SegmentationModelWorker(ModelWorker):
 
         return box
 
-    def pre_block(self, process_event, done_event, file_str, seg_ret):
+    def pre_block(self, process_event, done_event, file_str, seg_ret, seg_bounding):
         self.device = torch.device("cpu")
         self.model = torch.hub.load(
             "milesial/Pytorch-UNet",
@@ -428,7 +426,7 @@ class SegmentationModelWorker(ModelWorker):
         self.model = self.model.to(self.device)
         self.model.eval()
 
-    def block(self, process_event, done_event, file_str, seg_ret):
+    def block(self, process_event, done_event, file_str, seg_ret, seg_bounding):
         r_image = Image.open(file_str.value).convert("RGB")
 
         image = np.asarray(r_image, dtype=np.float32) / 255
@@ -459,6 +457,11 @@ class SegmentationModelWorker(ModelWorker):
         output = np.zeros_like(segmented, dtype=np.uint8)
 
         if rectangle is not None:
+            for i in range(4):
+                x = rectangle[i][0]
+                y = rectangle[i][1]
+                seg_bounding[2 * i] = x
+                seg_bounding[2 * i + 1] = y
             output = cv2.drawContours(output, [rectangle], 0, 255, 2)
 
         output = Image.fromarray(output, mode="L")
