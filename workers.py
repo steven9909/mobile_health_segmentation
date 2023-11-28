@@ -110,8 +110,8 @@ class DelegationWorker(Worker):
 
             if isinstance(state, ErrorState):
                 error_msg.value = str(state)
-                print_d("Delegation Done with Error")
                 done_event.set()
+                print_d("Delegation Done with Error")
                 continue
             else:
                 error_msg.value = ""

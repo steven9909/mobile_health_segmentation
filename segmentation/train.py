@@ -3,14 +3,13 @@ from pathlib import Path
 import pandas as pd
 import torch
 import torch.nn as nn
+import transforms.transform as T
+from data.dataset import CuffDataset
+from models.unet import UNet
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-
-import transforms.transform as T
-from data.dataset import CuffDataset
-from models.unet import UNet
 from util.arguments import ArgParser
 
 
