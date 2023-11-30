@@ -125,8 +125,7 @@ class DelegationWorker(Worker):
                 done_event.set()
                 continue
 
-            seg_image = cv2.imread(seg_ret.value)
-            scale = self.scale(pose_ret, seg_image, seg_bounding)
+            state = self.scale(pose_ret, seg_bounding)
 
             print_d("Delegation Done")
             done_event.set()
@@ -333,15 +332,64 @@ class DelegationWorker(Worker):
 
         return self._compare_patches(patch1, patch2)
 
-    def scale(self, pose_ret, seg_image, seg_bounding):
+    def _is_arm_aligned(self, elbow_point, shoulder_point, cuff_bounding_box):
+        x, y = elbow_point
+        x1, y1 = shoulder_point
+
+        m = (y1 - y) / (x1 - x) if x1 != x else float("inf")
+        c = y - m * x if m != float("inf") else x
+
+        bottom_left, top_left, top_right, bottom_right = cuff_bounding_box
+        mid_x = (bottom_left[0] + bottom_right[0]) / 2
+        mid_y = (bottom_left[1] + bottom_right[1]) / 2
+
+        mid_x_1 = (top_left[0] + top_right[0]) / 2
+        mid_y_1 = (top_left[1] + top_right[1]) / 2
+
+        if m != float("inf"):
+            return np.isclose(mid_y, m * mid_x + c) or np.isclose(
+                mid_y_1, m * mid_x_1 + c
+            )
+        else:
+            return np.isclose(mid_x, c) or np.isclose(mid_x_1, c)
+
+    def _distance_from_elbow(self, elbow, cuff_line):
+        x0, y0 = elbow
+        (x1, y1), (x2, y2) = cuff_line
+
+        A = y2 - y1
+        B = x1 - x2
+        C = x2 * y1 - x1 * y2
+
+        distance = abs(A * x0 + B * y0 + C) / (A**2 + B**2) ** 0.5
+        return distance
+
+    def scale(self, pose_ret, seg_bounding):
         CUFF_LENGTH = 10  # cm
 
-        r_wrist_x, r_wrist_y = pose_ret[6], pose_ret[7]
         r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
         r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]
 
-    def decide(self):
-        pass
+        # [bottom-left, top-left, top-right, bottom-right]
+        if not (
+            self._is_arm_aligned(
+                (r_elbow_x, r_elbow_y),
+                (r_shoulder_x, r_shoulder_y),
+                [
+                    seg_bounding[0:2],
+                    seg_bounding[2:4],
+                    seg_bounding[4:6],
+                    seg_bounding[6:8],
+                ],
+            )
+        ):
+            return ErrorState(
+                "Please make sure your cuff is on your upper arm at heart level."
+            )
+
+        dist_pixels = self._distance_from_elbow(
+            (r_elbow_x, r_elbow_y), [seg_bounding[0:2], seg_bounding[6:8]]
+        )
 
 
 class ModelWorker(Worker):

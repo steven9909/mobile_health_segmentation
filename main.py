@@ -2,37 +2,13 @@ import multiprocessing as mp
 import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import Tk, messagebox, ttk
+from tkinter import Tk, ttk
 
 import cv2
 from PIL import Image, ImageTk
 
-from utils import check_focus, print_d
+from utils import check_focus, print_d, ComplianceLabelManager, TransientLabel
 from workers import AudioWorker, DelegationWorker
-
-
-class LabelManager:
-    def __init__(self, label_names, labels):
-        self.label_names = label_names
-        self.labels = labels
-        self.timers = [0] * len(labels)
-
-    def set_err_message(self, message):
-        for i, label_name in enumerate(self.label_names):
-            if label_name.lower() in message.lower():
-                self.labels[i].configure(text=f"{label_name}: Not Compliant")
-                self.labels[i].configure(foreground="red")
-                self.timers[i] = time.time()
-            else:
-                self.update()
-
-    def update(self):
-        for i, timer in enumerate(self.timers):
-            if time.time() - timer > 5:
-                self.labels[i].configure(text=f"{self.label_names[i]}: Compliant")
-                self.labels[i].configure(foreground="green")
-                self.timers[i] = 0
-
 
 if __name__ == "__main__":
     frame_width = 1440
@@ -246,16 +222,16 @@ if __name__ == "__main__":
         for i, text in enumerate(compliance_texts)
     ]
 
-    label_manager = LabelManager(compliance_texts, compliance_labels)
+    label_manager = ComplianceLabelManager(compliance_texts, compliance_labels)
 
     label = tk.Label(frm)
     label.grid(row=0, column=0, rowspan=len(compliance_labels))
 
-    notify_message = tk.Label(frm)
-    notify_message.grid(row=1, column=0, columnspan=2)
-
     for index, l in enumerate(compliance_labels):
         l.grid(row=index, column=1, padx=10, pady=5)
+
+    notify_message = TransientLabel(frm)
+    notify_message.grid(row=len(compliance_labels), column=0, columnspan=2)
 
     prev_successful_frame = None
 
@@ -306,9 +282,11 @@ if __name__ == "__main__":
 
             while not done_event.is_set():
                 if audio_ret.value > AUDIO_THRESHOLD:
-                    label_manager.set_err_message("Audio")
+                    notify_message.configure(text="Audio level is too high")
+                    label_manager.set_err_message("Audio level is too high")
 
             if error_msg.value != "":
+                notify_message.configure(text=error_msg.value)
                 label_manager.set_err_message(error_msg.value)
             else:
                 label_manager.update()
