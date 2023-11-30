@@ -111,7 +111,6 @@ class DelegationWorker(Worker):
             if isinstance(state, ErrorState):
                 error_msg.value = str(state)
                 done_event.set()
-                print_d("Delegation Done with Error")
                 continue
             else:
                 error_msg.value = ""
@@ -121,9 +120,8 @@ class DelegationWorker(Worker):
 
             if self.skin_tone(pose_ret, image) > skin_threshold:
                 error_msg.value = (
-                    "Please make sure you are not wearing any sleeves below the cuff."
+                    "Please make sure you are not wearing any clothing below the cuff."
                 )
-                print_d("Delegation Done with Error")
                 done_event.set()
                 continue
 

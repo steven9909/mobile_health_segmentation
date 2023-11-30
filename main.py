@@ -11,12 +11,27 @@ from utils import check_focus, print_d
 from workers import AudioWorker, DelegationWorker
 
 
-def show_error_box(error_msg):
-    messagebox.showerror("ERROR", error_msg)
+class LabelManager:
+    def __init__(self, label_names, labels):
+        self.label_names = label_names
+        self.labels = labels
+        self.timers = [0] * len(labels)
 
+    def set_err_message(self, message):
+        for i, label_name in enumerate(self.label_names):
+            if label_name.lower() in message.lower():
+                self.labels[i].configure(text=f"{label_name}: Not Compliant")
+                self.labels[i].configure(foreground="red")
+                self.timers[i] = time.time()
+            else:
+                self.update()
 
-def show_notification(notify_msg):
-    messagebox.showinfo("NOTIFICATION", notify_msg)
+    def update(self):
+        for i, timer in enumerate(self.timers):
+            if time.time() - timer > 5:
+                self.labels[i].configure(text=f"{self.label_names[i]}: Compliant")
+                self.labels[i].configure(foreground="green")
+                self.timers[i] = 0
 
 
 if __name__ == "__main__":
@@ -77,6 +92,8 @@ if __name__ == "__main__":
     print_d("Starting main loop")
 
     root = Tk()
+
+    root.attributes("-fullscreen", True)
 
     cap = cv2.VideoCapture(0)
 
@@ -193,42 +210,52 @@ if __name__ == "__main__":
         while not endtut:
             root.update()
 
-        """
-        start_time = time.time()
-        current_time = time.time()
-        while (start_time - time.time() < REST_DURATION) and not skipwait:
-            label.configure(image=step1)
-            root.update()
-            if time.time() - current_time < 10:
-                continue
-            current_time = time.time()
-            label.configure(image=step2)
-            root.update()
-            if time.time() - current_time < 10:
-                continue
-            current_time = time.time()
-            label.configure(image=step3)
-            root.update()
-            if time.time() - current_time < 10:
-                continue
-        """
-
         first_launch = False
 
     canvas.destroy()
+    print("canvas destroyed")
 
-    frm = ttk.Frame(root, width=256, height=256)
-    frm.grid(row=0, column=0, padx=10, pady=2)
+    # center the widget
+    root.grid_columnconfigure(0, weight=1)
+    root.grid_columnconfigure(1, weight=1)
+    root.grid_columnconfigure(2, weight=1)
+
+    root.grid_rowconfigure(0, weight=1)
+    root.grid_rowconfigure(1, weight=1)
+    root.grid_rowconfigure(2, weight=1)
+
+    frm = ttk.Frame(root, width=1500, height=256)
+    frm.grid(row=1, column=1)
+
+    compliance_texts = [
+        "Spine",
+        "Neck",
+        "Left wrist",
+        "Left elbow",
+        "Left shoulder",
+        "Right wrist",
+        "Right elbow",
+        "Right shoulder",
+        "Audio Level",
+        "Clothing",
+        "Cuff Position",
+    ]
+
+    compliance_labels = [
+        tk.Label(frm, text=f"{text}: Compliant")
+        for i, text in enumerate(compliance_texts)
+    ]
+
+    label_manager = LabelManager(compliance_texts, compliance_labels)
 
     label = tk.Label(frm)
-    label.grid(row=0, column=0)
+    label.grid(row=0, column=0, rowspan=len(compliance_labels))
 
-    notify_label = tk.Label(frm)
-    notify_label.grid(row=1, column=0)
-    error_label = tk.Label(frm)
-    error_label.grid(row=2, column=0)
-    audio_label = tk.Label(frm)
-    audio_label.grid(row=3, column=0)
+    notify_message = tk.Label(frm)
+    notify_message.grid(row=1, column=0, columnspan=2)
+
+    for index, l in enumerate(compliance_labels):
+        l.grid(row=index, column=1, padx=10, pady=5)
 
     prev_successful_frame = None
 
@@ -266,11 +293,10 @@ if __name__ == "__main__":
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         if not ret or not (focus := check_focus(frame)):
-            notify_label.configure(text="Camera is not in focus or not connected")
+            notify_message.configure(text="Camera is not in focus or not connected")
+            label_manager.update()
             update_gui(update_ret=True)
             continue
-        else:
-            notify_label.configure(text="")
 
         if time.time() * 1000.0 - cur_time > GUI_UPDATE_INTERVAL:
             cur_time = time.time() * 1000.0
@@ -280,22 +306,15 @@ if __name__ == "__main__":
 
             while not done_event.is_set():
                 if audio_ret.value > AUDIO_THRESHOLD:
-                    audio_label.configure(
-                        text=f"Audio level = {audio_ret.value}. Please do not talk or laugh."
-                    )
-                    audio_label.configure(fg="red")
-                else:
-                    audio_label.configure(text=f"Audio level = {audio_ret.value}")
-                    audio_label.configure(fg="SystemButtonFace")
+                    label_manager.set_err_message("Audio")
 
             if error_msg.value != "":
-                error_label.configure(text=error_msg.value)
-                error_label.configure(fg="red")
+                label_manager.set_err_message(error_msg.value)
             else:
-                error_label.configure(text="")
-                error_label.configure(fg="SystemButtonFace")
+                label_manager.update()
 
             done_event.clear()
             update_gui(update_ret=True)
         else:
+            label_manager.update()
             update_gui(update_ret=True)
