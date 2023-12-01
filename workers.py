@@ -127,6 +127,11 @@ class DelegationWorker(Worker):
 
             state = self.scale(pose_ret, seg_bounding)
 
+            if isinstance(state, ErrorState):
+                error_msg.value = str(state)
+                done_event.set()
+                continue
+
             print_d("Delegation Done")
             done_event.set()
 
@@ -365,7 +370,7 @@ class DelegationWorker(Worker):
         return distance
 
     def scale(self, pose_ret, seg_bounding):
-        CUFF_LENGTH = 10  # cm
+        CUFF_LENGTH = 138.35  # mm
 
         r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
         r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]
@@ -390,6 +395,36 @@ class DelegationWorker(Worker):
         dist_pixels = self._distance_from_elbow(
             (r_elbow_x, r_elbow_y), [seg_bounding[0:2], seg_bounding[6:8]]
         )
+
+        cuff_left_side = math.sqrt(
+            (seg_bounding[1] - seg_bounding[3]) ** 2
+            + (seg_bounding[0] - seg_bounding[2]) ** 2
+        )
+
+        cuff_right_side = math.sqrt(
+            (seg_bounding[5] - seg_bounding[7]) ** 2
+            + (seg_bounding[4] - seg_bounding[6]) ** 2
+        )
+
+        cuff_length_pixels = (
+            cuff_left_side if (cuff_left_side > cuff_right_side) else cuff_right_side
+        )
+
+        print(f"Cuff length is: {cuff_length_pixels}")
+        print(f"Distance from cuff to elbow is {dist_pixels}")
+
+        actual_length = (dist_pixels / cuff_length_pixels) * CUFF_LENGTH
+
+        if actual_length < 10:
+            return ErrorState(
+                "Please make sure your cuff position is higher on your arm."
+            )
+        elif actual_length > 40:
+            return ErrorState(
+                "Please make sure your cuff position is lower on your arm."
+            )
+        else:
+            return SuccessState()
 
 
 class ModelWorker(Worker):
@@ -465,7 +500,7 @@ class SegmentationModelWorker(ModelWorker):
         )
         self.model.load_state_dict(
             torch.load(
-                "./segmentation/output/unet.pth",
+                "./segmentation/output/unet_color",
                 map_location=self.device,
             )["model"]
         )
