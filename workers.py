@@ -212,6 +212,8 @@ class DelegationWorker(Worker):
         # Find angle of shoulders from horizontal
         should_x = abs(pose_ret[12] - pose_ret[10])
         should_y = abs(pose_ret[13] - pose_ret[11])
+        if should_x == 0:
+            return ErrorState("Please sit straight in the chair.")
         should_ang = math.degrees(math.atan(should_y / should_x))
 
         # If shoulders misaligned, send feedback for how to adjust
