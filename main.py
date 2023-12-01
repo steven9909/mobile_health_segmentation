@@ -18,7 +18,7 @@ if __name__ == "__main__":
     GUI_UPDATE_INTERVAL = 500  # ms
     REST_DURATION = 5 * 60  # s
     AUDIO_THRESHOLD = 50  # db
-    SKIN_THRESHOLD = 15
+    SKIN_THRESHOLD = 20
     skip_rest = True
 
     save_dir = Path("./saved")
