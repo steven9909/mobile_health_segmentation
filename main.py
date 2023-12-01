@@ -3,6 +3,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import Tk, ttk
+import math
 
 import cv2
 from PIL import Image, ImageTk
@@ -75,7 +76,7 @@ if __name__ == "__main__":
 
     cur_time = time.time() * 1000.0
 
-    first_launch = True
+    first_launch = False
     endtut = False
     if first_launch:
         canvas = tk.Canvas(root, width=1194, height=832)
@@ -186,10 +187,9 @@ if __name__ == "__main__":
         while not endtut:
             root.update()
 
+        if endtut:
+            canvas.destroy()
         first_launch = False
-
-    canvas.destroy()
-    print("canvas destroyed")
 
     # center the widget
     root.grid_columnconfigure(0, weight=1)
@@ -244,8 +244,49 @@ if __name__ == "__main__":
             for p in range(0, len(pose_ret), 2):
                 cv2.circle(frame, pose_ret[p : p + 2], 2, (0, 255, 0), 2)
 
-            for p in range(0, len(correct_pose), 2):
-                cv2.circle(frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1)
+            # Shoulder line
+            cv2.line(frame,
+                     (161, 70),
+                     (91, 70),
+                     color=(255, 250, 255),
+                     thickness=2)
+            
+            # Left elbow line
+            cv2.line(frame,
+                     (75, 180),
+                     (91, 70),
+                     color=(255, 250, 255),
+                     thickness=2)
+            
+            # Right elbow line
+            cv2.line(frame,
+                     (181, 180),
+                     (161, 70),
+                     color=(255, 250, 255),
+                     thickness=2)
+            
+            # Left wrist line
+            cv2.line(frame,
+                     (50, 230),
+                     (75, 180),
+                     color=(255, 250, 255),
+                     thickness=2)
+            
+            # Right wrist line
+            cv2.line(frame,
+                     (216, 230),
+                     (181, 180),
+                     color=(255, 250, 255),
+                     thickness=2)
+            
+            '''
+                cv2.line(frame,
+                         (int(correct_pose[2*p]), int(correct_pose[2*p + 1])),
+                         (int(correct_pose[2*p + 2]), int(correct_pose[2*p + 3])),
+                         color=(255, 250, 255),
+                         thickness=9)
+            '''
+                #cv2.circle(frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1)
 
             seg = Image.open(seg_ret.value).convert("L")
 

@@ -114,9 +114,9 @@ class DelegationWorker(Worker):
                 continue
             else:
                 error_msg.value = ""
-            for i, (x, y) in enumerate(self.get_overlay(pose_ret)):
-                correct_pose[2 * i] = int(x)
-                correct_pose[(2 * i) + 1] = int(y)
+            #for i, (x, y) in enumerate(self.get_overlay(pose_ret)):
+            #    correct_pose[2 * i] = int(x)
+            #    correct_pose[(2 * i) + 1] = int(y)
 
             if self.skin_tone(pose_ret, image) > skin_threshold:
                 error_msg.value = (
@@ -131,13 +131,13 @@ class DelegationWorker(Worker):
             done_event.set()
 
     def get_overlay(self, pose_ret, optang_es=5, optang_ew=25):
-        r_wri = [pose_ret[6], pose_ret[7]]
-        r_elb = [pose_ret[8], pose_ret[9]]
-        r_sho = [pose_ret[10], pose_ret[11]]
+        r_wri = (pose_ret[6], pose_ret[7])
+        r_elb = (pose_ret[8], pose_ret[9])
+        r_sho = (pose_ret[10], pose_ret[11])
 
-        l_sho = [pose_ret[12], pose_ret[13]]
-        l_elb = [pose_ret[14], pose_ret[15]]
-        l_wri = [pose_ret[16], pose_ret[17]]
+        l_sho = (pose_ret[12], pose_ret[13])
+        l_elb = (pose_ret[14], pose_ret[15])
+        l_wri = (pose_ret[16], pose_ret[17])
 
         r_rad_es = math.hypot(abs(r_sho[1] - r_elb[1]), abs(r_sho[0] - r_elb[0]))
         r_rad_ew = math.hypot(abs(r_wri[1] - r_elb[1]), abs(r_wri[0] - r_elb[0]))
@@ -162,7 +162,18 @@ class DelegationWorker(Worker):
             r_elb[1] + r_rad_ew * math.sin(math.radians(90 + optang_ew)),
         )
 
-        return [l_opt_elbow, r_opt_elbow, l_opt_wrist, r_opt_wrist]
+        return [l_opt_wrist, l_opt_elbow, l_sho, r_sho, r_opt_elbow, r_opt_wrist]
+    
+    def check_position(pose_ret, max_distance=5):
+        joints = ["right wrist", "right elbow", "right shoulder", 
+                  "left shoulder", "left elbow", "left wrist"]
+        
+        # r_wri, r_elb, r_sho, l_sho, l_elb, l_wri, 
+        optimal_position = [(216, 230), (181, 180), (161, 70), (91, 70),  (75, 180), (50, 230)]
+
+        # Get coordinates of left and right wrist, elbow, and shoulder
+        curr_pos = [(pose_ret[6], pose_ret[7]), (pose_ret[8], pose_ret[9]),(pose_ret[10], pose_ret[11]),
+                    (pose_ret[12], pose_ret[13]), (pose_ret[14], pose_ret[15]), (pose_ret[16], pose_ret[17])]
 
     def validate(self, pose_ret, optang_es=5, optang_ew=25):
         """Validate the output of segmentation model and pose estimation model
