@@ -48,7 +48,7 @@ if __name__ == "__main__":
         l_wrist
     """
     pose_ret = manager.Array("i", [0] * 18)
-    correct_pose = manager.Array("i", [0] * 8)
+    correct_pose = manager.Array("i", [0] * 6)
     seg_ret = manager.Value("c", str(save_dir / "seg.png"))
     audio_ret = manager.Value("i", 0)
     error_msg = manager.Value("c", "")
@@ -241,9 +241,6 @@ if __name__ == "__main__":
         global imgtk
 
         if update_ret:
-            for p in range(0, len(pose_ret), 2):
-                cv2.circle(frame, pose_ret[p : p + 2], 2, (0, 255, 0), 2)
-
             # Shoulder line
             cv2.line(frame, (161, 70), (91, 70), color=(255, 250, 255), thickness=2)
 
@@ -257,9 +254,29 @@ if __name__ == "__main__":
             cv2.line(frame, (50, 230), (75, 180), color=(255, 250, 255), thickness=2)
 
             # Right wrist line
+<<<<<<< HEAD
             cv2.line(frame, (216, 230), (181, 180), color=(255, 250, 255), thickness=2)
 
             """
+=======
+            cv2.line(frame,
+                     (216, 230),
+                     (181, 180),
+                     color=(255, 250, 255),
+                     thickness=2)
+
+            for p in range(0, len(pose_ret), 2):
+                curr_col = (0,0, 255)
+                if p >= 6:
+                    if correct_pose[(p - 6)//2] == 1:
+                        curr_col = (0, 255, 0) # Green for success
+                    else:
+                        curr_col = (255, 0, 0)
+                cv2.circle(frame, pose_ret[p : p + 2], 2, curr_col, 2)
+
+            
+            '''
+>>>>>>> 028d02fdc2389e35c6eaff3048c6ea1c47273e3c
                 cv2.line(frame,
                          (int(correct_pose[2*p]), int(correct_pose[2*p + 1])),
                          (int(correct_pose[2*p + 2]), int(correct_pose[2*p + 3])),
