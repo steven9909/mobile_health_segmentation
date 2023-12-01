@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     GUI_UPDATE_INTERVAL = 500  # ms
     REST_DURATION = 5 * 60  # s
-    AUDIO_THRESHOLD = 50  # db
+    AUDIO_THRESHOLD = 55  # db
     SKIN_THRESHOLD = 20
     skip_rest = True
 
@@ -245,55 +245,35 @@ if __name__ == "__main__":
                 cv2.circle(frame, pose_ret[p : p + 2], 2, (0, 255, 0), 2)
 
             # Shoulder line
-            cv2.line(frame,
-                     (161, 70),
-                     (91, 70),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (161, 70), (91, 70), color=(255, 250, 255), thickness=2)
+
             # Left elbow line
-            cv2.line(frame,
-                     (75, 180),
-                     (91, 70),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (75, 180), (91, 70), color=(255, 250, 255), thickness=2)
+
             # Right elbow line
-            cv2.line(frame,
-                     (181, 180),
-                     (161, 70),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (181, 180), (161, 70), color=(255, 250, 255), thickness=2)
+
             # Left wrist line
-            cv2.line(frame,
-                     (50, 230),
-                     (75, 180),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (50, 230), (75, 180), color=(255, 250, 255), thickness=2)
+
             # Right wrist line
-            cv2.line(frame,
-                     (216, 230),
-                     (181, 180),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
-            '''
+            cv2.line(frame, (216, 230), (181, 180), color=(255, 250, 255), thickness=2)
+
+            """
                 cv2.line(frame,
                          (int(correct_pose[2*p]), int(correct_pose[2*p + 1])),
                          (int(correct_pose[2*p + 2]), int(correct_pose[2*p + 3])),
                          color=(255, 250, 255),
                          thickness=9)
-            '''
-                #cv2.circle(frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1)
+            """
+            # cv2.circle(frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1)
 
-            seg = Image.open(seg_ret.value).convert("L")
+            seg_image = Image.open(seg_ret.value).convert("RGB")
 
         img = Image.fromarray(frame)
 
         if update_ret:
-            img.paste(seg.convert("RGB"), (0, 0), seg)
+            img = Image.blend(img, seg_image, 0.5)
 
         img = img.resize((512, 512), resample=Image.BICUBIC)
 
