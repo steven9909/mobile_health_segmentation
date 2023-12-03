@@ -632,7 +632,7 @@ class SegmentationModelWorker(ModelWorker):
         )
         self.model.load_state_dict(
             torch.load(
-                "./segmentation/output/unet_dice_more_2",
+                "./segmentation/output/unet_dice_12_02_late",
                 map_location=self.device,
             )["model"]
         )
@@ -646,14 +646,14 @@ class SegmentationModelWorker(ModelWorker):
         image = image.transpose((2, 0, 1))
         image = torch.from_numpy(image).to(self.device)
         image = normalize(
-            image, mean=(0.5703, 0.5436, 0.5151), std=(0.2507, 0.2406, 0.2306)
+            image, mean=(0.5742, 0.5423, 0.5122), std=(0.2504, 0.2408, 0.2302)
         )
         image = torch.unsqueeze(image, 0)
 
         segmented = self.model(image)
         segmented = (
             np.transpose(
-                np.squeeze((torch.sigmoid(segmented.detach()) > 0.3).cpu().numpy(), 0),
+                np.squeeze((torch.sigmoid(segmented.detach()) > 0.2).cpu().numpy(), 0),
                 (1, 2, 0),
             )[:, :, 1]
             * 255

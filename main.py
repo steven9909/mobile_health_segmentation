@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     cur_time = time.time() * 1000.0
 
-    first_launch = True
+    first_launch = False
     endtut = False
     if first_launch:
         canvas = tk.Canvas(root, width=1194, height=832)
