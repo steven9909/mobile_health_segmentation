@@ -229,10 +229,10 @@ if __name__ == "__main__":
     notify_message.grid(row=len(compliance_labels), column=0, columnspan=2)
 
     instr_label = tk.Label(frm, text="Please align your body to the skeleton.")
-    instr_label.grid(row=0, column=0)
+    instr_label.grid(row=len(compliance_labels) + 1, column=0)
 
     done_label = tk.Label(frm)
-    done_label.grid(row=1, column=0)
+    done_label.grid(row=len(compliance_labels) + 2, column=0)
 
     prev_successful_frame = None
 
@@ -296,7 +296,7 @@ if __name__ == "__main__":
             frame, (patch_size, patch_size), interpolation=cv2.INTER_CUBIC
         )
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        #frame = cv2.flip(frame, 1)
+        # frame = cv2.flip(frame, 1)
 
         if not ret or not (focus := check_focus(frame)):
             notify_message.configure(text="Camera is not in focus or not connected")
