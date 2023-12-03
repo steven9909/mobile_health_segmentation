@@ -231,6 +231,9 @@ if __name__ == "__main__":
     instr_label = tk.Label(frm, text="Please align your body to the skeleton.")
     instr_label.grid(row=0, column=0)
 
+    done_label = tk.Label(frm)
+    done_label.grid(row=1, column=0)
+
     prev_successful_frame = None
 
     imgtk = None
@@ -317,8 +320,10 @@ if __name__ == "__main__":
             if error_msg.value != "":
                 notify_message.configure(text=error_msg.value)
                 label_manager.set_err_message(error_msg.value)
+                done_label.config(text="")
             else:
                 label_manager.update()
+                done_label.config(text="Ready to go!")
 
             done_event.clear()
             update_gui(update_ret=True)
