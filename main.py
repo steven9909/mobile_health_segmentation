@@ -95,7 +95,7 @@ if __name__ == "__main__":
         step3 = step3.resize((1194, 832))
         step3 = ImageTk.PhotoImage(image=step3)
 
-        step4 = Image.open("./tutorial-illustrations/step4-cuffposition.jpg")
+        step4 = Image.open("./tutorial-illustrations/step4-cuffposition-artery.jpg")
         step4 = step4.resize((1194, 832))
         step4 = ImageTk.PhotoImage(image=step4)
 
@@ -315,6 +315,7 @@ if __name__ == "__main__":
             frame, (patch_size, patch_size), interpolation=cv2.INTER_CUBIC
         )
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = cv2.flip(frame, 1)
 
         if not ret or not (focus := check_focus(frame)):
             notify_message.configure(text="Camera is not in focus or not connected")
