@@ -119,7 +119,7 @@ class DelegationWorker(Worker):
             else:
                 error_msg.value = ""
 
-            #for i, (x, y) in enumerate(self.get_overlay(pose_ret)):
+            # for i, (x, y) in enumerate(self.get_overlay(pose_ret)):
             #    correct_pose[2 * i] = int(x)
             #    correct_pose[(2 * i) + 1] = int(y)
 
@@ -130,7 +130,9 @@ class DelegationWorker(Worker):
                 done_event.set()
                 continue
 
-            state = self.scale(pose_ret, seg_bounding)
+            seg_image = cv2.imread(seg_ret.value, cv2.IMREAD_GRAYSCALE)
+
+            state = self.scale(pose_ret, seg_bounding, seg_image)
 
             print_d("Delegation Done")
             done_event.set()
@@ -168,15 +170,19 @@ class DelegationWorker(Worker):
         )
 
         return [l_opt_wrist, l_opt_elbow, l_sho, r_sho, r_opt_elbow, r_opt_wrist]
-    
+
     def check_on_line(self, xp, yp, x1, y1, x2, y2, maxDistance):
         dxL, dyL = x2 - x1, y2 - y1  # line: vector from (x1,y1) to (x2,y2)
         dxP, dyP = xp - x1, yp - y1  # point: vector from (x1,y1) to (xp,yp)
         dxQ, dyQ = xp - x2, yp - y2  # extra: vector from (x2,y2) to (xp,yp)
 
-        squareLen = dxL * dxL + dyL * dyL #squared length of line
-        dotProd   = dxP * dxL + dyP * dyL #squared distance of point from (x1,y1) along line
-        crossProd = dyP * dxL - dxP * dyL #area of parallelogram defined by line and point
+        squareLen = dxL * dxL + dyL * dyL  # squared length of line
+        dotProd = (
+            dxP * dxL + dyP * dyL
+        )  # squared distance of point from (x1,y1) along line
+        crossProd = (
+            dyP * dxL - dxP * dyL
+        )  # area of parallelogram defined by line and point
 
         # perpendicular distance of point from line
         distance = abs(crossProd) / math.sqrt(squareLen)
@@ -196,27 +202,55 @@ class DelegationWorker(Worker):
         return distance <= maxDistance
 
     def check_position(self, pose_ret, max_distance=10):
-        # r_wri, r_elb, r_sho, l_sho, l_elb, l_wri, 
-        #optimal_position = [(216, 230), (181, 180), (161, 70), (91, 70),  (75, 180), (50, 230)]
-        optimal_position = [(50, 230), (75, 180), (91, 70), (161, 70), (181, 180), (216, 230)]
+        # r_wri, r_elb, r_sho, l_sho, l_elb, l_wri,
+        # optimal_position = [(216, 230), (181, 180), (161, 70), (91, 70),  (75, 180), (50, 230)]
+        optimal_position = [
+            (50, 230),
+            (75, 180),
+            (91, 70),
+            (161, 70),
+            (181, 180),
+            (216, 230),
+        ]
 
         # Get coordinates of left and right wrist, elbow, and shoulder
-        curr_pos = [(pose_ret[6], pose_ret[7]), (pose_ret[8], pose_ret[9]), (pose_ret[10], pose_ret[11]),
-                    (pose_ret[12], pose_ret[13]), (pose_ret[14], pose_ret[15]), (pose_ret[16], pose_ret[17])]
-        
+        curr_pos = [
+            (pose_ret[6], pose_ret[7]),
+            (pose_ret[8], pose_ret[9]),
+            (pose_ret[10], pose_ret[11]),
+            (pose_ret[12], pose_ret[13]),
+            (pose_ret[14], pose_ret[15]),
+            (pose_ret[16], pose_ret[17]),
+        ]
+
         check = []
         for i in range(3):
-            check.append(self.check_on_line(curr_pos[i][0], curr_pos[i][1], optimal_position[i][0], 
-                                            optimal_position[i][1], optimal_position[i+1][0], optimal_position[i+1][1], 
-                                            max_distance))
-            
+            check.append(
+                self.check_on_line(
+                    curr_pos[i][0],
+                    curr_pos[i][1],
+                    optimal_position[i][0],
+                    optimal_position[i][1],
+                    optimal_position[i + 1][0],
+                    optimal_position[i + 1][1],
+                    max_distance,
+                )
+            )
+
         for i in range(3, 6):
-            check.append(self.check_on_line(curr_pos[i][0], curr_pos[i][1], optimal_position[i - 1][0], 
-                                            optimal_position[i - 1][1], optimal_position[i][0], optimal_position[i][1], 
-                                            max_distance))
+            check.append(
+                self.check_on_line(
+                    curr_pos[i][0],
+                    curr_pos[i][1],
+                    optimal_position[i - 1][0],
+                    optimal_position[i - 1][1],
+                    optimal_position[i][0],
+                    optimal_position[i][1],
+                    max_distance,
+                )
+            )
 
         return [int(c) for c in check]
-    
 
     def validate(self, pose_ret, optang_es=5, optang_ew=25):
         """Validate the output of segmentation model and pose estimation model
@@ -289,19 +323,26 @@ class DelegationWorker(Worker):
             )
 
         # 4. Check if valid arm positions
-        
+
         check_positions = self.check_position(pose_ret)
 
         if sum(check_positions) < 6:
-            check_labels = ["Right wrist", "Right elbow", "Right shoulder", 
-                  "Left shoulder", "Left elbow", "Left wrist"]
-            misaligned = [check_labels[i] for i, x in enumerate(check_positions) if not x]
+            check_labels = [
+                "Right wrist",
+                "Right elbow",
+                "Right shoulder",
+                "Left shoulder",
+                "Left elbow",
+                "Left wrist",
+            ]
+            misaligned = [
+                check_labels[i] for i, x in enumerate(check_positions) if not x
+            ]
             return ErrorState(
                 f"The following joints are in the wrong position: {', '.join(misaligned)}"
             )
 
-
-        '''
+        """
         # Get coordinates of left and right wrist, elbow, and shoulder
         r_wri = [pose_ret[6], pose_ret[7]]
         r_elb = [pose_ret[8], pose_ret[9]]
@@ -344,7 +385,7 @@ class DelegationWorker(Worker):
             return ErrorState(
                 f"The following joints are in the wrong position: {', '.join(misaligned)}"
             )
-        '''
+        """
 
         return SuccessState()
 
@@ -399,6 +440,36 @@ class DelegationWorker(Worker):
 
         return self._compare_patches(patch1, patch2)
 
+    def _is_point_on_line_segment(self, x, y, x1, y1, x2, y2):
+        return min(x1, x2) <= x <= max(x1, x2) and min(y1, y2) <= y <= max(y1, y2)
+
+    def _arm_aligned_helper(self, m, c, rect):
+        (x1, y1), (x2, y2), (x3, y3), (x4, y4) = rect
+
+        edges = [
+            ((x1, y1), (x2, y2)),
+            ((x2, y2), (x3, y3)),
+            ((x3, y3), (x4, y4)),
+            ((x4, y4), (x1, y1)),
+        ]
+
+        for (x1, y1), (x2, y2) in edges:
+            if x1 == x2:
+                y_int = m * x1 + c
+                if self._is_point_on_line_segment(x1, y_int, x1, y1, x2, y2):
+                    return True
+            else:
+                m_edge = (y2 - y1) / (x2 - x1)
+                c_edge = y1 - m_edge * x1
+
+                x_int = (c_edge - c) / (m - m_edge)
+                y_int = m * x_int + c
+
+                if self._is_point_on_line_segment(x_int, y_int, x1, y1, x2, y2):
+                    return True
+
+        return False
+
     def _is_arm_aligned(self, elbow_point, shoulder_point, cuff_bounding_box):
         x, y = elbow_point
         x1, y1 = shoulder_point
@@ -406,33 +477,29 @@ class DelegationWorker(Worker):
         m = (y1 - y) / (x1 - x) if x1 != x else float("inf")
         c = y - m * x if m != float("inf") else x
 
-        bottom_left, top_left, top_right, bottom_right = cuff_bounding_box
-        mid_x = (bottom_left[0] + bottom_right[0]) / 2
-        mid_y = (bottom_left[1] + bottom_right[1]) / 2
+        return self._arm_aligned_helper(m, c, cuff_bounding_box)
 
-        mid_x_1 = (top_left[0] + top_right[0]) / 2
-        mid_y_1 = (top_left[1] + top_right[1]) / 2
-
-        if m != float("inf"):
-            return np.isclose(mid_y, m * mid_x + c) or np.isclose(
-                mid_y_1, m * mid_x_1 + c
-            )
-        else:
-            return np.isclose(mid_x, c) or np.isclose(mid_x_1, c)
-
-    def _distance_from_elbow(self, elbow, cuff_line):
+    def _distance_from_elbow(self, elbow, cuff_line, seg_image):
         x0, y0 = elbow
         (x1, y1), (x2, y2) = cuff_line
+        midpoint_x = (x1 + x2) / 2
+        midpoint_y = (y1 + y2) / 2
 
-        A = y2 - y1
-        B = x1 - x2
-        C = x2 * y1 - x1 * y2
+        m = (midpoint_y - y0) / (midpoint_x - x0) if midpoint_x != x0 else float("inf")
+        c = y0 - m * x0 if m != float("inf") else x0
 
-        distance = abs(A * x0 + B * y0 + C) / (A**2 + B**2) ** 0.5
-        return distance
+        for x in np.arange(x0 - 25, x0 + 25, 0.05):
+            y = m * x + c
+            if y < 0 or y > 255:
+                continue
 
-    def scale(self, pose_ret, seg_bounding):
-        CUFF_LENGTH = 10  # cm
+            if seg_image[int(y), int(x)] == 255:
+                return math.sqrt((x - x0) ** 2 + (y - y0) ** 2)
+        else:
+            return -1
+
+    def scale(self, pose_ret, seg_bounding, seg_image):
+        CUFF_LENGTH = 138.35  # mm
 
         r_elbow_x, r_elbow_y = pose_ret[8], pose_ret[9]
         r_shoulder_x, r_shoulder_y = pose_ret[10], pose_ret[11]
@@ -451,12 +518,45 @@ class DelegationWorker(Worker):
             )
         ):
             return ErrorState(
-                "Please make sure your cuff is on your upper arm at heart level."
+                "Please make sure your cuff is on your right upper arm at heart level."
             )
 
         dist_pixels = self._distance_from_elbow(
-            (r_elbow_x, r_elbow_y), [seg_bounding[0:2], seg_bounding[6:8]]
+            (r_elbow_x, r_elbow_y), [seg_bounding[0:2], seg_bounding[6:8]], seg_image
         )
+
+        if dist_pixels == -1:
+            return ErrorState("Please make sure your cuff is aligned.")
+
+        cuff_left_side = math.sqrt(
+            (seg_bounding[1] - seg_bounding[3]) ** 2
+            + (seg_bounding[0] - seg_bounding[2]) ** 2
+        )
+
+        cuff_right_side = math.sqrt(
+            (seg_bounding[5] - seg_bounding[7]) ** 2
+            + (seg_bounding[4] - seg_bounding[6]) ** 2
+        )
+
+        cuff_length_pixels = (
+            cuff_left_side if (cuff_left_side > cuff_right_side) else cuff_right_side
+        )
+
+        print(f"Cuff length is: {cuff_length_pixels}")
+        print(f"Distance from cuff to elbow is {dist_pixels}")
+
+        actual_length = (dist_pixels / cuff_length_pixels) * CUFF_LENGTH
+
+        if actual_length < 5:
+            return ErrorState(
+                "Please make sure your cuff position is higher on your arm."
+            )
+        elif actual_length > 50:
+            return ErrorState(
+                "Please make sure your cuff position is lower on your arm."
+            )
+        else:
+            return SuccessState()
 
 
 class ModelWorker(Worker):
@@ -532,7 +632,7 @@ class SegmentationModelWorker(ModelWorker):
         )
         self.model.load_state_dict(
             torch.load(
-                "./segmentation/output/unet.pth",
+                "./segmentation/output/unet_dice_more_2",
                 map_location=self.device,
             )["model"]
         )
@@ -541,24 +641,19 @@ class SegmentationModelWorker(ModelWorker):
 
     def block(self, process_event, done_event, file_str, seg_ret, seg_bounding):
         r_image = Image.open(file_str.value).convert("RGB")
-
         image = np.asarray(r_image, dtype=np.float32) / 255
-
-        r_image.close()
 
         image = image.transpose((2, 0, 1))
         image = torch.from_numpy(image).to(self.device)
         image = normalize(
-            image, mean=(0.5687, 0.5434, 0.5152), std=(0.2508, 0.2399, 0.2307)
+            image, mean=(0.5703, 0.5436, 0.5151), std=(0.2507, 0.2406, 0.2306)
         )
         image = torch.unsqueeze(image, 0)
 
         segmented = self.model(image)
         segmented = (
             np.transpose(
-                np.squeeze(
-                    (torch.sigmoid(segmented.detach()) > 0.3).float().cpu().numpy(), 0
-                ),
+                np.squeeze((torch.sigmoid(segmented.detach()) > 0.3).cpu().numpy(), 0),
                 (1, 2, 0),
             )[:, :, 1]
             * 255
@@ -567,17 +662,14 @@ class SegmentationModelWorker(ModelWorker):
         largest_island_mask = self._get_largest_island(segmented)
         rectangle = self._find_minimum_rectangle(largest_island_mask)
 
-        output = np.zeros_like(segmented, dtype=np.uint8)
-
         if rectangle is not None:
             for i in range(4):
                 x = rectangle[i][0]
                 y = rectangle[i][1]
                 seg_bounding[2 * i] = x
                 seg_bounding[2 * i + 1] = y
-            output = cv2.drawContours(output, [rectangle], 0, 255, 2)
 
-        output = Image.fromarray(output, mode="L")
+        output = Image.fromarray(segmented, mode="L")
         output.save(seg_ret.value)
         output.close()
 
@@ -603,7 +695,7 @@ class PoseEstimatorWorker(ModelWorker):
     def block(self, process_event, done_event, file_str, pose_ret):
         infer_request = self.compiled_model.create_infer_request()
 
-        image = Image.open(file_str.value)
+        image = Image.open(file_str.value).convert("RGB")
         image.load()
         image = np.asarray(image, dtype=np.float32)
 

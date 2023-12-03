@@ -7,17 +7,15 @@ import math
 
 import cv2
 from PIL import Image, ImageTk
+from PIL.ImageOps import mirror
 
 from utils import check_focus, print_d, ComplianceLabelManager, TransientLabel
 from workers import AudioWorker, DelegationWorker
 
 if __name__ == "__main__":
-    frame_width = 1440
-    frame_height = 960
-
     GUI_UPDATE_INTERVAL = 500  # ms
     REST_DURATION = 5 * 60  # s
-    AUDIO_THRESHOLD = 50  # db
+    AUDIO_THRESHOLD = 55  # db
     SKIN_THRESHOLD = 20
     skip_rest = True
 
@@ -27,8 +25,6 @@ if __name__ == "__main__":
     patch_size = 256
 
     cap = cv2.VideoCapture(0)
-    cap.set(3, frame_width)
-    cap.set(4, frame_height)
 
     process_event = mp.Event()
     done_event = mp.Event()
@@ -76,7 +72,7 @@ if __name__ == "__main__":
 
     cur_time = time.time() * 1000.0
 
-    first_launch = False
+    first_launch = True
     endtut = False
     if first_launch:
         canvas = tk.Canvas(root, width=1194, height=832)
@@ -129,7 +125,6 @@ if __name__ == "__main__":
             if curr_ind == maxind - 1:
                 next_button_label.configure(image=done_button_photo)
                 next_button_label.bind("<Button>", lambda e: end_tut())
-            root.update()
 
         next_button_photo = Image.open("./tutorial-illustrations/next-button.jpg")
         next_button_photo = next_button_photo.resize((140, 61))
@@ -153,7 +148,6 @@ if __name__ == "__main__":
 
                 curr_ind -= 1
                 canvas.create_image(597, 416, image=tutimgs[curr_ind])
-            root.update()
 
         noprev_button_photo = Image.open(
             "./tutorial-illustrations/no-previous-button.jpg"
@@ -183,9 +177,10 @@ if __name__ == "__main__":
         )
 
         canvas.create_image(597, 416, image=step1)
-
+        print("entering endtut")
         while not endtut:
             root.update()
+        print("exit")
 
         if endtut:
             canvas.destroy()
@@ -242,65 +237,46 @@ if __name__ == "__main__":
 
         if update_ret:
             # Shoulder line
-            cv2.line(frame,
-                     (161, 70),
-                     (91, 70),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (161, 70), (91, 70), color=(255, 250, 255), thickness=2)
+
             # Left elbow line
-            cv2.line(frame,
-                     (75, 180),
-                     (91, 70),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (75, 180), (91, 70), color=(255, 250, 255), thickness=2)
+
             # Right elbow line
-            cv2.line(frame,
-                     (181, 180),
-                     (161, 70),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (181, 180), (161, 70), color=(255, 250, 255), thickness=2)
+
             # Left wrist line
-            cv2.line(frame,
-                     (50, 230),
-                     (75, 180),
-                     color=(255, 250, 255),
-                     thickness=2)
-            
+            cv2.line(frame, (50, 230), (75, 180), color=(255, 250, 255), thickness=2)
+
             # Right wrist line
-            cv2.line(frame,
-                     (216, 230),
-                     (181, 180),
-                     color=(255, 250, 255),
-                     thickness=2)
+            cv2.line(frame, (216, 230), (181, 180), color=(255, 250, 255), thickness=2)
 
             for p in range(0, len(pose_ret), 2):
-                curr_col = (0,0, 255)
+                curr_col = (0, 0, 255)
                 if p >= 6:
-                    if correct_pose[(p - 6)//2] == 1:
-                        curr_col = (0, 255, 0) # Green for success
+                    if correct_pose[(p - 6) // 2] == 1:
+                        curr_col = (0, 255, 0)  # Green for success
                     else:
                         curr_col = (255, 0, 0)
                 cv2.circle(frame, pose_ret[p : p + 2], 2, curr_col, 2)
 
-            
-            '''
+            """
                 cv2.line(frame,
                          (int(correct_pose[2*p]), int(correct_pose[2*p + 1])),
                          (int(correct_pose[2*p + 2]), int(correct_pose[2*p + 3])),
                          color=(255, 250, 255),
                          thickness=9)
-            '''
-                #cv2.circle(frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1)
+            """
+            # cv2.circle(frame, correct_pose[p : p + 2], 2, (255, 0, 255), 1)
 
-            seg = Image.open(seg_ret.value).convert("L")
+            seg_image = Image.open(seg_ret.value).convert("RGB")
 
         img = Image.fromarray(frame)
 
         if update_ret:
-            img.paste(seg.convert("RGB"), (0, 0), seg)
+            img = Image.blend(img, seg_image, 0.5)
+
+        img = mirror(img)
 
         img = img.resize((512, 512), resample=Image.BICUBIC)
 
@@ -310,7 +286,6 @@ if __name__ == "__main__":
 
     while True:
         ret, frame = cap.read()
-
         frame = cv2.resize(
             frame, (patch_size, patch_size), interpolation=cv2.INTER_CUBIC
         )
@@ -326,7 +301,9 @@ if __name__ == "__main__":
         if time.time() * 1000.0 - cur_time > GUI_UPDATE_INTERVAL:
             cur_time = time.time() * 1000.0
 
-            cv2.imwrite(str(save_dir / "frame.jpg"), frame)
+            cv2.imwrite(
+                str(save_dir / "frame.jpg"), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            )
             process_event.set()  # we are ready to pass off the image to the Delegation worker
 
             while not done_event.is_set():
