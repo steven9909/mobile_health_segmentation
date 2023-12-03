@@ -228,6 +228,9 @@ if __name__ == "__main__":
     notify_message = TransientLabel(frm)
     notify_message.grid(row=len(compliance_labels), column=0, columnspan=2)
 
+    instr_label = tk.Label(frm, text="Please align your body to the skeleton.")
+    instr_label.grid(row=0, column=0)
+
     prev_successful_frame = None
 
     imgtk = None
