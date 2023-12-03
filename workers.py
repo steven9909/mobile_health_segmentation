@@ -201,7 +201,7 @@ class DelegationWorker(Worker):
         # else check if it's within maxDistance of the line
         return distance <= maxDistance
 
-    def check_position(self, pose_ret, max_distance=10):
+    def check_position(self, pose_ret, max_distance=15):
         # r_wri, r_elb, r_sho, l_sho, l_elb, l_wri,
         # optimal_position = [(216, 230), (181, 180), (161, 70), (91, 70),  (75, 180), (50, 230)]
         optimal_position = [
