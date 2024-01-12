@@ -1,4 +1,5 @@
-# mobile_health_segmentation
+# ArterialAdvisor
+A Laptop-based Interactive Computer Vision-Enabled Interface for Directing At-Home Blood Pressure Measurement
 
 ## Introduction
 
